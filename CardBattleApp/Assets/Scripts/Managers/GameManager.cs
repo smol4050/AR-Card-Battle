@@ -147,11 +147,9 @@ public class GameManager : MonoBehaviour
             int dmg0 = u0 != null ? u0.attack + u0.tempAttack : 0;
             int dmg1 = u1 != null ? u1.attack + u1.tempAttack : 0;
 
-            // HABILIDAD ON-ATTACK: Overload Shot (Siege Walker)
             if (u0 != null && u0.cardId == CardID.SiegeWalker && u1 == null) dmg0 += 2;
             if (u1 != null && u1.cardId == CardID.SiegeWalker && u0 == null) dmg1 += 2;
 
-            // Aplicar daño simultáneo
             if (u0 != null && u1 != null)
             {
                 u0.TakeDamage(dmg1);
@@ -164,40 +162,51 @@ public class GameManager : MonoBehaviour
             CheckDeath(1, lane, u1);
         }
 
-        EndRound();
+        CheckWinCondition(); // NUEVO: Evaluamos si alguien murió antes de reiniciar la ronda
     }
 
     private void CheckDeath(int playerId, int lane, Unit unit)
     {
         if (unit != null && unit.IsDead)
         {
-            // HABILIDAD ON-DEATH: Replication (Drone Swarm)
+            // NUEVO: Limpiamos el tablero PRIMERO para evitar un ciclo infinito si dos Drones se matan a la vez
+            board[playerId, lane] = null;
+            OnUnitDied?.Invoke(playerId, lane);
+
             if (unit.cardId == CardID.DroneSwarm)
             {
                 int enemyId = 1 - playerId;
-                if (board[enemyId, lane] != null) board[enemyId, lane].TakeDamage(1);
-                else players[enemyId].TakeDamage(1);
-            }
+                Unit enemyUnit = board[enemyId, lane];
 
-            board[playerId, lane] = null;
-            OnUnitDied?.Invoke(playerId, lane);
+                if (enemyUnit != null)
+                {
+                    enemyUnit.TakeDamage(1);
+                    // NUEVO: Llamado recursivo. Si el daño del Drone Swarm mata a la unidad enemiga, la destruye.
+                    CheckDeath(enemyId, lane, enemyUnit);
+                }
+                else
+                {
+                    players[enemyId].TakeDamage(1);
+                }
+            }
         }
     }
 
-    private void EndRound()
+    // NUEVO: Método recuperado de la versión anterior
+    private void CheckWinCondition()
     {
-        currentPhase = RoundPhase.End;
-        OnPhaseChanged?.Invoke(currentPhase);
+        bool p0Dead = players[0].hp <= 0;
+        bool p1Dead = players[1].hp <= 0;
 
-        // Limpiar modificadores de turno
-        for (int p = 0; p < 2; p++)
+        if (p0Dead || p1Dead)
         {
-            for (int l = 0; l < 3; l++)
-            {
-                if (board[p, l] != null) board[p, l].ResetTurnModifiers();
-            }
+            currentPhase = RoundPhase.End;
+            if (p0Dead && p1Dead) OnLogMessage?.Invoke(-1, "Game Over: DRAW!");
+            else if (p0Dead) OnLogMessage?.Invoke(-1, "Game Over: Void Dominion WINS!");
+            else if (p1Dead) OnLogMessage?.Invoke(-1, "Game Over: Solar Alliance WINS!");
+            return; // Detenemos el flujo, ya no se llama a EndRound()
         }
 
-        StartNewRound();
+        //EndRound(); // Si nadie murió, la ronda termina y se reinicia
     }
 }

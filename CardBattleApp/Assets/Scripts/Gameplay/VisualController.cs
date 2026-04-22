@@ -3,7 +3,9 @@ using UnityEngine;
 public class VisualController : MonoBehaviour
 {
     public GameManager gameManager;
-    public GameObject cubePrefab;
+    public GameObject prefabSolar; // Cubo Azul/Blanco (Jugador 0)
+    public GameObject prefabVoid;  // Cubo Morado/Oscuro (Jugador 1 - IA)
+
     public Transform[] p0Lanes;
     public Transform[] p1Lanes;
 
@@ -11,7 +13,6 @@ public class VisualController : MonoBehaviour
 
     private void OnEnable()
     {
-        // Nos suscribimos a los eventos de lógica
         gameManager.OnUnitSpawned += HandleUnitSpawned;
         gameManager.OnUnitDied += HandleUnitDied;
     }
@@ -25,7 +26,10 @@ public class VisualController : MonoBehaviour
     private void HandleUnitSpawned(int playerId, int lane, Unit unitData)
     {
         Transform spawnPos = (playerId == 0) ? p0Lanes[lane] : p1Lanes[lane];
-        GameObject newCube = Instantiate(cubePrefab, spawnPos.position, spawnPos.rotation);
+
+        // Seleccionamos el prefab según el jugador
+        GameObject prefabToUse = (playerId == 0) ? prefabSolar : prefabVoid;
+        GameObject newCube = Instantiate(prefabToUse, spawnPos.position, spawnPos.rotation);
 
         _visualCubes[playerId, lane] = newCube;
         Debug.Log($"Visual: Cubo instanciado para jugador {playerId} en carril {lane}.");

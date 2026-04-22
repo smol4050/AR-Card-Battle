@@ -3,25 +3,46 @@ using UnityEngine;
 public class TutorialManager : MonoBehaviour
 {
     [SerializeField] private GameManager gameManager;
+    [SerializeField] private TutorialAIController aiController;
+
+    private int _tutorialStep = 0;
 
     public void StartInGameTutorial()
     {
-        Debug.Log("Tutorial: The match has started! It is Player 0's turn.");
-        Debug.Log("Tutorial: Try placing a card in any lane.");
+        Debug.Log("Tutorial: The match has started! In this game, phases are SIMULTANEOUS.");
+        Debug.Log("Tutorial: Both players plan their moves at the same time. Place your Scout Unit in any lane!");
 
-        // Nos suscribimos al evento del GameManager para detectar cuándo el jugador hace su primera jugada
-        gameManager.OnUnitSpawned += CheckFirstPlay;
+        gameManager.OnUnitSpawned += CheckPlayerPlay;
+        gameManager.OnPlayerReadyStatusChanged += CheckReadyStatus;
+
+        aiController.ActivateAI();
     }
 
-    private void CheckFirstPlay(int playerId, int lane, Unit unit)
+    private void CheckPlayerPlay(int playerId, int lane, Unit unit)
     {
-        if (playerId == 0)
+        if (playerId == 0 && _tutorialStep == 0)
         {
-            Debug.Log($"Tutorial: Excellent! You placed a unit with {unit.health} HP in Lane {lane}.");
-            Debug.Log("Tutorial: Now press 'End Turn' so the combat resolves.");
+            Debug.Log($"Tutorial: Excellent. You deployed {unit.cardId}.");
+            Debug.Log("Tutorial: Notice that the AI is also planning its move. Once you are done, press 'Ready'!");
+            _tutorialStep = 1;
+            gameManager.OnUnitSpawned -= CheckPlayerPlay;
+        }
+    }
 
-            // Nos desuscribimos para no repetir el mensaje
-            gameManager.OnUnitSpawned -= CheckFirstPlay;
+    private void CheckReadyStatus(int playerId, bool isReady)
+    {
+        if (playerId == 0 && isReady && _tutorialStep == 1)
+        {
+            Debug.Log("Tutorial: You are Ready. Waiting for the opponent...");
+            _tutorialStep = 2; // Avanzamos el paso directamente aquí
+        }
+
+        // Ahora es un 'if' separado. Evalúa el estado global sin importar quién lo detonó.
+        if (_tutorialStep == 2 && gameManager.isPlayerReady[0] && gameManager.isPlayerReady[1])
+        {
+            Debug.Log("Tutorial: Both are ready! Watch the combat unfold automatically.");
+            _tutorialStep = 3;
+            gameManager.OnPlayerReadyStatusChanged -= CheckReadyStatus;
         }
     }
 }
