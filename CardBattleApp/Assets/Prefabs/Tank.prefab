@@ -14,7 +14,7 @@ GameObject:
   - component: {fileID: 7187140994500586909}
   - component: {fileID: 5753240058349121058}
   m_Layer: 0
-  m_Name: Cube
+  m_Name: Tank
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0

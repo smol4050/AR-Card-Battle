@@ -4,51 +4,73 @@ using UnityEngine;
 public class TurnManager : MonoBehaviour
 {
     private GameManager _gameManager;
-    public int currentTurnPlayerId = 0;
-    public float turnTimer = 30f;
+    public float roundTimer = 30f;
     private bool _isTimerRunning = false;
 
-    public event Action<int> OnTurnChanged;
     public event Action<float> OnTimerUpdated;
 
     public void Initialize(GameManager gm)
     {
         _gameManager = gm;
-        StartTurn(0);
+
+        // Nos suscribimos al evento para saber cuándo inicia una nueva ronda
+        _gameManager.OnPhaseChanged += HandlePhaseChanged;
+
+        // Si al inicializar ya estamos en preparación, arrancamos el reloj
+        if (_gameManager.currentPhase == RoundPhase.Preparation)
+        {
+            StartTimer();
+        }
+    }
+
+    private void OnDestroy()
+    {
+        if (_gameManager != null)
+        {
+            _gameManager.OnPhaseChanged -= HandlePhaseChanged;
+        }
+    }
+
+    private void HandlePhaseChanged(RoundPhase newPhase)
+    {
+        if (newPhase == RoundPhase.Preparation)
+        {
+            StartTimer();
+        }
+        else
+        {
+            // Detenemos el reloj durante el combate y el final de ronda
+            _isTimerRunning = false;
+        }
+    }
+
+    private void StartTimer()
+    {
+        roundTimer = 30f;
+        _isTimerRunning = true;
     }
 
     private void Update()
     {
         if (!_isTimerRunning) return;
 
-        turnTimer -= Time.deltaTime;
-        OnTimerUpdated?.Invoke(turnTimer);
+        roundTimer -= Time.deltaTime;
+        OnTimerUpdated?.Invoke(roundTimer);
 
-        if (turnTimer <= 0)
+        if (roundTimer <= 0)
         {
-            EndTurn();
+            ForceEndPreparationPhase();
         }
     }
 
-    // Método API: Alguien (input local o red) pide terminar el turno
-    public void EndTurn()
+    private void ForceEndPreparationPhase()
     {
         _isTimerRunning = false;
 
-        // El turno termina, hay combate
-        _gameManager.ResolveCombat();
-
-        int nextPlayer = (currentTurnPlayerId == 0) ? 1 : 0;
-        StartTurn(nextPlayer);
-    }
-
-    private void StartTurn(int playerId)
-    {
-        currentTurnPlayerId = playerId;
-        turnTimer = 30f;
-        _isTimerRunning = true;
-
-        _gameManager.players[playerId].StartTurn();
-        OnTurnChanged?.Invoke(playerId);
+        // Si el tiempo se acaba, forzamos el estado "Ready" en los jugadores rezagados.
+        // Como el GameManager evalúa si ambos están listos para iniciar el combate,
+        // esto disparará el ExecuteCombatPhase() de forma automática y determinista.
+        if (!_gameManager.isPlayerReady[0]) _gameManager.SetPlayerReady(0);
+        if (!_gameManager.isPlayerReady[1]) _gameManager.SetPlayerReady(1);
     }
 }

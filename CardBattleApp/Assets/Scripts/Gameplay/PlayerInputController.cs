@@ -4,33 +4,34 @@ public class PlayerInputController : MonoBehaviour
 {
     [SerializeField] private GameManager gameManager;
 
-    // Para este prototipo local, definimos los stats de la carta base en inglés
-    private readonly int _baseCardHealth = 10;
-    private readonly int _baseCardAttack = 5;
+    // Para este prototipo local, definimos los stats de una carta base (Ej: Scout Unit)
+    private readonly int _baseCardHealth = 1;
+    private readonly int _baseCardAttack = 2;
     private readonly int _baseCardCost = 1;
+    private readonly CardID _baseCardId = CardID.ScoutUnit;
 
     /// <summary>
     /// Se llama cuando el jugador local hace clic en un carril (Lane).
     /// </summary>
     public void OnLaneClicked(int laneIndex)
     {
-        // En nuestro entorno local, el jugador humano siempre será el ID 0
         int localPlayerId = 0;
 
-        // Validamos si es nuestro turno usando el estado del GameManager (podríamos consultarlo al TurnManager también)
-        if (gameManager.currentState != GameState.Playing)
+        // Validamos si estamos en la fase correcta (Preparation)
+        if (gameManager.currentPhase != RoundPhase.Preparation)
         {
-            Debug.LogWarning("Input: The game is not in a playing state.");
+            Debug.LogWarning("Input: The game is not in the Preparation phase.");
             return;
         }
 
-        // Enviamos la petición pura a nuestra API matemática
+        // Enviamos la petición pura a nuestra API matemática usando la nueva firma
         bool success = gameManager.PlayCard(
             playerId: localPlayerId,
             laneIndex: laneIndex,
-            cardHealth: _baseCardHealth,
-            cardAttack: _baseCardAttack,
-            energyCost: _baseCardCost
+            hp: _baseCardHealth,
+            atk: _baseCardAttack,
+            cost: _baseCardCost,
+            cardId: _baseCardId
         );
 
         if (success)
@@ -41,5 +42,14 @@ public class PlayerInputController : MonoBehaviour
         {
             Debug.LogWarning("Input: Failed to play card. Not enough energy or lane occupied.");
         }
+    }
+
+    /// <summary>
+    /// Se llama cuando el jugador presiona el botón "Ready".
+    /// </summary>
+    public void OnReadyClicked()
+    {
+        int localPlayerId = 0;
+        gameManager.SetPlayerReady(localPlayerId);
     }
 }
