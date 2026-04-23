@@ -1,15 +1,17 @@
 using UnityEngine;
+using System.Collections.Generic;
 
 public class VisualController : MonoBehaviour
 {
     public GameManager gameManager;
-    public GameObject prefabSolar; // Cubo Azul/Blanco (Jugador 0)
-    public GameObject prefabVoid;  // Cubo Morado/Oscuro (Jugador 1 - IA)
+    public GameObject prefabSolar;
+    public GameObject prefabVoid;
 
-    public Transform[] p0Lanes;
-    public Transform[] p1Lanes;
+    // En TFT definimos un área general en lugar de carriles estrictos
+    public Transform p0BoardArea;
+    public Transform p1BoardArea;
 
-    private GameObject[,] _visualCubes = new GameObject[2, 3];
+    private Dictionary<Unit, GameObject> _visualCubes = new Dictionary<Unit, GameObject>();
 
     private void OnEnable()
     {
@@ -23,25 +25,28 @@ public class VisualController : MonoBehaviour
         gameManager.OnUnitDied -= HandleUnitDied;
     }
 
-    private void HandleUnitSpawned(int playerId, int lane, Unit unitData)
+    private void HandleUnitSpawned(int playerId, Unit unitData)
     {
-        Transform spawnPos = (playerId == 0) ? p0Lanes[lane] : p1Lanes[lane];
+        Transform baseArea = (playerId == 0) ? p0BoardArea : p1BoardArea;
 
-        // Seleccionamos el prefab según el jugador
+        // Asignamos una posición con un pequeño desplazamiento aleatorio en el área
+        Vector3 randomOffset = new Vector3(Random.Range(-1.5f, 1.5f), 0, Random.Range(-1.0f, 1.0f));
+        Vector3 spawnPos = baseArea.position + randomOffset;
+
         GameObject prefabToUse = (playerId == 0) ? prefabSolar : prefabVoid;
-        GameObject newCube = Instantiate(prefabToUse, spawnPos.position, spawnPos.rotation);
+        GameObject newCube = Instantiate(prefabToUse, spawnPos, baseArea.rotation);
 
-        _visualCubes[playerId, lane] = newCube;
-        Debug.Log($"Visual: Cubo instanciado para jugador {playerId} en carril {lane}.");
+        _visualCubes[unitData] = newCube;
+        Debug.Log($"Visual: Cubo TFT instanciado para jugador {playerId}.");
     }
 
-    private void HandleUnitDied(int playerId, int lane)
+    private void HandleUnitDied(int playerId, Unit unit)
     {
-        if (_visualCubes[playerId, lane] != null)
+        if (_visualCubes.ContainsKey(unit))
         {
-            Destroy(_visualCubes[playerId, lane]);
-            _visualCubes[playerId, lane] = null;
-            Debug.Log($"Visual: Cubo destruido para jugador {playerId} en carril {lane}.");
+            Destroy(_visualCubes[unit]);
+            _visualCubes.Remove(unit);
+            Debug.Log($"Visual: Cubo destruido para jugador {playerId}.");
         }
     }
 }

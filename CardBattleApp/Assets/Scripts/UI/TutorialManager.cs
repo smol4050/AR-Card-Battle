@@ -3,46 +3,28 @@ using UnityEngine;
 public class TutorialManager : MonoBehaviour
 {
     [SerializeField] private GameManager gameManager;
-    [SerializeField] private TutorialAIController aiController;
-
-    private int _tutorialStep = 0;
 
     public void StartInGameTutorial()
     {
-        Debug.Log("Tutorial: The match has started! In this game, phases are SIMULTANEOUS.");
-        Debug.Log("Tutorial: Both players plan their moves at the same time. Place your Scout Unit in any lane!");
+        Debug.Log("Tutorial: TFT Mini-Battle Starting!");
 
-        gameManager.OnUnitSpawned += CheckPlayerPlay;
-        gameManager.OnPlayerReadyStatusChanged += CheckReadyStatus;
+        // Damos energía máxima temporalmente para el test
+        gameManager.players[0].energy = 5;
+        gameManager.players[1].energy = 5;
 
-        aiController.ActivateAI();
-    }
+        // Jugador 0 invoca múltiples unidades pequeñas
+        gameManager.PlayCard(0, hp: 1, atk: 2, cost: 1, cardId: CardID.ScoutUnit);
+        gameManager.PlayCard(0, hp: 1, atk: 2, cost: 1, cardId: CardID.ScoutUnit);
 
-    private void CheckPlayerPlay(int playerId, int lane, Unit unit)
-    {
-        if (playerId == 0 && _tutorialStep == 0)
-        {
-            Debug.Log($"Tutorial: Excellent. You deployed {unit.cardId}.");
-            Debug.Log("Tutorial: Notice that the AI is also planning its move. Once you are done, press 'Ready'!");
-            _tutorialStep = 1;
-            gameManager.OnUnitSpawned -= CheckPlayerPlay;
-        }
-    }
+        // Jugador 1 (IA) invoca un tanque pesado
+        gameManager.PlayCard(1, hp: 5, atk: 1, cost: 3, cardId: CardID.PulseTank);
 
-    private void CheckReadyStatus(int playerId, bool isReady)
-    {
-        if (playerId == 0 && isReady && _tutorialStep == 1)
-        {
-            Debug.Log("Tutorial: You are Ready. Waiting for the opponent...");
-            _tutorialStep = 2; // Avanzamos el paso directamente aquí
-        }
+        Debug.Log("Tutorial: Units deployed. Forcing Ready state to execute auto-combat...");
 
-        // Ahora es un 'if' separado. Evalúa el estado global sin importar quién lo detonó.
-        if (_tutorialStep == 2 && gameManager.isPlayerReady[0] && gameManager.isPlayerReady[1])
-        {
-            Debug.Log("Tutorial: Both are ready! Watch the combat unfold automatically.");
-            _tutorialStep = 3;
-            gameManager.OnPlayerReadyStatusChanged -= CheckReadyStatus;
-        }
+        // Detonamos la fase forzando la respuesta de los jugadores
+        gameManager.SetPlayerReady(0);
+        gameManager.SetPlayerReady(1);
+
+        Debug.Log("Tutorial: Mini-Battle executed automatically. Check console logs!");
     }
 }

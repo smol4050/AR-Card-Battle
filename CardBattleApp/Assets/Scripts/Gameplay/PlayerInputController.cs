@@ -11,9 +11,10 @@ public class PlayerInputController : MonoBehaviour
     private readonly CardID _baseCardId = CardID.ScoutUnit;
 
     /// <summary>
-    /// Se llama cuando el jugador local hace clic en un carril (Lane).
+    /// Se llama cuando el jugador local presiona el botón de desplegar carta.
+    /// En TFT, la carta va a la zona general del jugador.
     /// </summary>
-    public void OnLaneClicked(int laneIndex)
+    public void OnDeployCardClicked()
     {
         int localPlayerId = 0;
 
@@ -24,10 +25,9 @@ public class PlayerInputController : MonoBehaviour
             return;
         }
 
-        // Enviamos la petición pura a nuestra API matemática usando la nueva firma
+        // Enviamos la petición pura a nuestra API matemática usando la nueva firma TFT
         bool success = gameManager.PlayCard(
             playerId: localPlayerId,
-            laneIndex: laneIndex,
             hp: _baseCardHealth,
             atk: _baseCardAttack,
             cost: _baseCardCost,
@@ -36,11 +36,11 @@ public class PlayerInputController : MonoBehaviour
 
         if (success)
         {
-            Debug.Log($"Input: Card successfully played in lane {laneIndex}!");
+            Debug.Log("Input: Card successfully deployed to the TFT board!");
         }
         else
         {
-            Debug.LogWarning("Input: Failed to play card. Not enough energy or lane occupied.");
+            Debug.LogWarning("Input: Failed to play card. Not enough energy.");
         }
     }
 
