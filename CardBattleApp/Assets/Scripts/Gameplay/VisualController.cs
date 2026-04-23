@@ -38,6 +38,12 @@ public class VisualController : MonoBehaviour
         GameObject prefabToUse = (playerId == 0) ? prefabSolar : prefabVoid;
         GameObject newCube = Instantiate(prefabToUse, spawnPos, baseArea.rotation);
 
+        UnitWorldUI uiComponent = newCube.GetComponent<UnitWorldUI>();
+        if (uiComponent != null)
+        {
+            uiComponent.Initialize(unitData);
+        }
+
         _visualCubes[unitData] = newCube;
     }
 
