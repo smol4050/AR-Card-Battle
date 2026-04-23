@@ -44,6 +44,14 @@ public class GameManager : MonoBehaviour
         LogMessage(-1, "Preparation Phase started. Deploy units.");
     }
 
+    private void Update()
+    {
+        if (currentPhase == RoundPhase.Combat)
+        {
+            ProcessCombatTick(Time.deltaTime);
+        }
+    }
+
     public void SetPlayerReady(int playerId)
     {
         if (currentPhase != RoundPhase.Preparation) return;
