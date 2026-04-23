@@ -41,12 +41,12 @@ public class TutorialAIController : MonoBehaviour
 
     public void ExecuteDecisionLogic()
     {
-        // En el modelo TFT, la IA despliega su unidad en su área dinámica
+        // En el modelo TFT, la IA evalúa su energía y despliega su unidad en su área dinámica (Ej: Y positivo)
         if (gameManager.currentPhase == RoundPhase.Preparation && gameManager.players[_aiPlayerId].energy >= 1)
         {
-            // Despliega Drone Swarm: Coste 1, ATK 1, HP 2
-            gameManager.PlayCard(_aiPlayerId, hp: 2, atk: 1, cost: 1, cardId: CardID.DroneSwarm);
-            gameManager.LogMessage(_aiPlayerId, "Void Dominion (AI) deployed Drone Swarm!");
+            // Despliega la Horda (Instanciará 4 unidades automáticamente gracias al GameManager)
+            gameManager.PlayCard(_aiPlayerId, CardID.VoidHorde, new Vector2(0, 2f), 1);
+            gameManager.LogMessage(_aiPlayerId, "Void Dominion (AI) deployed Void Horde!");
         }
     }
 }

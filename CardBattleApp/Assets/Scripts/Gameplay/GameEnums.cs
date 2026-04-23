@@ -8,11 +8,6 @@ public enum RoundPhase
 public enum CardID
 {
     None,
-    ScoutUnit, BladeMonk, PulseTank, LightCommander, // Solar Alliance
-    DroneSwarm, VoidKnight, SiegeWalker, DarkCommander // Void Dominion
-}
-
-public enum SpellID
-{
-    EnergyBurst, ShieldField
+    SollarDuelist, SollarForce, SollarCommander,
+    VoidHorde, VoidCommander, VoidHeavyShooter
 }

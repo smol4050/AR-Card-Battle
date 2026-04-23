@@ -4,43 +4,37 @@ public class PlayerInputController : MonoBehaviour
 {
     [SerializeField] private GameManager gameManager;
 
-    // Para este prototipo local, definimos los stats de una carta base (Ej: Scout Unit)
-    private readonly int _baseCardHealth = 1;
-    private readonly int _baseCardAttack = 2;
+    // Para este prototipo local, definimos el coste y el ID de la carta que lanzará el botón
     private readonly int _baseCardCost = 1;
-    private readonly CardID _baseCardId = CardID.ScoutUnit;
+    private readonly CardID _baseCardId = CardID.SollarDuelist;
 
     /// <summary>
     /// Se llama cuando el jugador local presiona el botón de desplegar carta.
-    /// En TFT, la carta va a la zona general del jugador.
     /// </summary>
     public void OnDeployCardClicked()
     {
         int localPlayerId = 0;
+        int currentEnergy = gameManager.players[localPlayerId].energy;
 
-        // Validamos si estamos en la fase correcta (Preparation)
-        if (gameManager.currentPhase != RoundPhase.Preparation)
+        // Utilizamos nuestra regla estática aislada para validar la jugada
+        if (!GameplayRules.CanPlayCard(gameManager.currentPhase, currentEnergy, _baseCardCost))
         {
-            Debug.LogWarning("Input: The game is not in the Preparation phase.");
+            Debug.LogWarning("Input: Cannot play card. Wrong phase or not enough energy.");
             return;
         }
 
-        // Enviamos la petición pura a nuestra API matemática usando la nueva firma TFT
+        // Enviamos la petición usando la nueva firma (playerId, cardId, spawnPos, cost)
+        // Usamos una posición lógica (Ej: Y negativo para el lado del jugador)
         bool success = gameManager.PlayCard(
-            playerId: localPlayerId,
-            hp: _baseCardHealth,
-            atk: _baseCardAttack,
-            cost: _baseCardCost,
-            cardId: _baseCardId
+            localPlayerId,
+            _baseCardId,
+            new Vector2(0, -2f),
+            _baseCardCost
         );
 
         if (success)
         {
-            Debug.Log("Input: Card successfully deployed to the TFT board!");
-        }
-        else
-        {
-            Debug.LogWarning("Input: Failed to play card. Not enough energy.");
+            Debug.Log($"Input: {_baseCardId} successfully deployed to the TFT board!");
         }
     }
 

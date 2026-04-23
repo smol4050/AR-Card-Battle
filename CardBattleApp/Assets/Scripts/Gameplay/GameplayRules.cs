@@ -1,24 +1,18 @@
 public static class GameplayRules
 {
     /// <summary>
-    /// Valida si un jugador puede colocar una carta (cubo) en el tablero.
+    /// Valida si un jugador tiene permitido desplegar una unidad al tablero TFT.
     /// </summary>
-    public static bool CanPlayCard(int requestingPlayerIndex, int currentTurnPlayerIndex, int playerEnergy, CharacterCombat existingUnitInLane)
+    public static bool CanPlayCard(RoundPhase currentPhase, int playerEnergy, int cardCost)
     {
-        // 1. ¿Es el turno del jugador?
-        if (requestingPlayerIndex != currentTurnPlayerIndex)
+        // 1. ¿Estamos en la fase correcta?
+        if (currentPhase != RoundPhase.Preparation)
         {
             return false;
         }
 
-        // 2. ¿Tiene al menos 1 de energía?
-        if (playerEnergy < 1)
-        {
-            return false;
-        }
-
-        // 3. ¿El carril está libre?
-        if (existingUnitInLane != null)
+        // 2. ¿Tiene la energía suficiente?
+        if (playerEnergy < cardCost)
         {
             return false;
         }
