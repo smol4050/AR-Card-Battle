@@ -5,17 +5,15 @@ using UnityEngine;
 public class GameManager : MonoBehaviour
 {
     public PlayerManager[] players = new PlayerManager[2];
-
-    // MODELO TFT: Listas dinámicas en lugar de matriz
     public List<Unit>[] activeUnits = new List<Unit>[2];
 
     public RoundPhase currentPhase { get; private set; }
     public bool[] isPlayerReady = new bool[2];
 
-    // Eventos visuales adaptados a parámetros flotantes
     public event Action<int, Unit> OnUnitSpawned;
     public event Action<int, Unit> OnUnitDied;
-    public event Action<Unit, Unit, float> OnUnitAttacked; // Atacante, Defensor, DañoReal
+    public event Action<Unit, Unit, float> OnUnitAttacked;
+    public event Action<Unit, CardID> OnUnitSkillCast;
     public event Action<RoundPhase> OnPhaseChanged;
     public event Action<int, bool> OnPlayerReadyStatusChanged;
     public event Action<int, string> OnLogMessage;
@@ -24,10 +22,8 @@ public class GameManager : MonoBehaviour
     {
         players[0] = new PlayerManager(0);
         players[1] = new PlayerManager(1);
-
         activeUnits[0] = new List<Unit>();
         activeUnits[1] = new List<Unit>();
-
         StartNewRound();
     }
 
@@ -36,10 +32,8 @@ public class GameManager : MonoBehaviour
         currentPhase = RoundPhase.Preparation;
         isPlayerReady[0] = false;
         isPlayerReady[1] = false;
-
         players[0].StartTurn();
         players[1].StartTurn();
-
         OnPhaseChanged?.Invoke(currentPhase);
         LogMessage(-1, "Preparation Phase started. Deploy units.");
     }
@@ -68,7 +62,7 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    // Instanciador con Stats Base de la Tabla
+    // Instancia EXCLUSIVAMENTE las 6 unidades base
     public bool PlayCard(int playerId, CardID cardId, Vector2 spawnPos, int cost = 1)
     {
         if (currentPhase != RoundPhase.Preparation) return false;
@@ -78,7 +72,6 @@ public class GameManager : MonoBehaviour
 
         for (int i = 0; i < spawnCount; i++)
         {
-            // Espaciamos ligeramente la horda para evitar superposición exacta
             Vector2 finalPos = spawnPos + new Vector2(i * 0.3f, 0);
             Unit newUnit = null;
 
@@ -88,6 +81,14 @@ public class GameManager : MonoBehaviour
                     newUnit = new Unit(playerId, cardId, 180f, 38f, 40f, 0.95f, finalPos);
                     newUnit.skillCooldown = 6f;
                     break;
+                case CardID.SollarForce:
+                    newUnit = new Unit(playerId, cardId, 140f, 20f, 35f, 0.85f, finalPos);
+                    newUnit.skillCooldown = 5f;
+                    break;
+                case CardID.SollarCommander:
+                    newUnit = new Unit(playerId, cardId, 160f, 28f, 35f, 0.85f, finalPos);
+                    newUnit.skillCooldown = 8f;
+                    break;
                 case CardID.VoidHorde:
                     newUnit = new Unit(playerId, cardId, 55f, 15f, 10f, 1.25f, finalPos);
                     break;
@@ -95,17 +96,9 @@ public class GameManager : MonoBehaviour
                     newUnit = new Unit(playerId, cardId, 150f, 30f, 30f, 0.9f, finalPos);
                     newUnit.skillCooldown = 7f;
                     break;
-                case CardID.SollarForce:
-                    newUnit = new Unit(playerId, cardId, 140f, 20f, 35f, 0.85f, finalPos);
-                    newUnit.skillCooldown = 5f;
-                    break;
                 case CardID.VoidHeavyShooter:
                     newUnit = new Unit(playerId, cardId, 120f, 60f, 20f, 0.8f, finalPos);
                     newUnit.skillCooldown = 6f;
-                    break;
-                case CardID.SollarCommander:
-                    newUnit = new Unit(playerId, cardId, 160f, 28f, 35f, 0.85f, finalPos);
-                    newUnit.skillCooldown = 8f;
                     break;
             }
 
@@ -115,59 +108,42 @@ public class GameManager : MonoBehaviour
                 OnUnitSpawned?.Invoke(playerId, newUnit);
             }
         }
-
-        LogMessage(playerId, $"Deployed {cardId}.");
         return true;
     }
 
-    // --- MOTOR EN TIEMPO REAL ---
     public void ProcessCombatTick(float deltaTime)
     {
         if (currentPhase != RoundPhase.Combat) return;
 
         UpdateAurasAndPassives();
-
         ProcessTeamTicks(0, 1, deltaTime);
         ProcessTeamTicks(1, 0, deltaTime);
-
         CleanUpDeadUnits(0);
         CleanUpDeadUnits(1);
-
         CheckWinCondition();
     }
 
     private void UpdateAurasAndPassives()
     {
-        // 1. Limpiar modificadores volátiles en cada tick
         foreach (var list in activeUnits)
         {
             foreach (var u in list)
             {
                 u.bonusSpeed = 0;
                 u.damageMultiplier = 1f;
-                u.damageTakenMultiplier = 1f; // Se modificaría por Marca de Aniquilación
             }
         }
 
-        // 2. Pasiva: Fuego Coordinado (Void Horde)
         int hordeCount = activeUnits[1].FindAll(u => u.cardId == CardID.VoidHorde).Count;
         float hordeMultiplier = 1f;
         if (hordeCount == 2) hordeMultiplier = 1.20f;
         else if (hordeCount == 3) hordeMultiplier = 1.35f;
         else if (hordeCount >= 4) hordeMultiplier = 1.50f;
 
-        // 3. Evaluar pasivas globales por unidad
         foreach (Unit u in activeUnits[1])
         {
-            if (u.cardId == CardID.VoidHorde)
-            {
-                u.damageMultiplier *= hordeMultiplier;
-            }
-            if (u.cardId == CardID.VoidCommander)
-            {
-                // +5% velocidad de ataque por cada unidad Void viva
-                u.bonusSpeed += (activeUnits[1].Count * 0.05f);
-            }
+            if (u.cardId == CardID.VoidHorde) u.damageMultiplier *= hordeMultiplier;
+            if (u.cardId == CardID.VoidCommander) u.bonusSpeed += (activeUnits[1].Count * 0.05f);
         }
     }
 
@@ -175,14 +151,12 @@ public class GameManager : MonoBehaviour
     {
         foreach (Unit attacker in activeUnits[attackerTeamId])
         {
-            // Procesar Stun
             if (attacker.stunTimer > 0)
             {
                 attacker.stunTimer -= deltaTime;
                 continue;
             }
 
-            // Procesar Pasiva de Sollar Force (Stun pasivo cada 4s)
             if (attacker.cardId == CardID.SollarForce)
             {
                 attacker.passiveTimer += deltaTime;
@@ -194,14 +168,12 @@ public class GameManager : MonoBehaviour
                 }
             }
 
-            // Procesar Habilidades (Cooldowns)
             if (attacker.skillCooldown > 0)
             {
                 attacker.currentSkillTimer += deltaTime;
-                // Pasiva Sollar Commander reduce cooldowns
                 if (attacker.ownerId == 0 && activeUnits[0].Exists(u => u.cardId == CardID.SollarCommander))
                 {
-                    attacker.currentSkillTimer += (deltaTime * 0.10f); // 10% más rápido
+                    attacker.currentSkillTimer += (deltaTime * 0.10f);
                 }
 
                 if (attacker.currentSkillTimer >= attacker.skillCooldown)
@@ -211,34 +183,22 @@ public class GameManager : MonoBehaviour
                 }
             }
 
-            // Procesar Ataque Básico
             attacker.attackProgress += attacker.FinalSpeed * deltaTime;
             if (attacker.attackProgress >= 1f)
             {
                 Unit target = GetClosestTarget(attacker, defenderTeamId);
-                if (target != null)
-                {
-                    ExecuteBasicAttack(attacker, target);
-                }
-                else
-                {
-                    // SOLUCIÓN CS1503: Convertimos el ataque flotante al entero más cercano antes de golpear al jugador
-                    int damageToPlayer = Mathf.RoundToInt(attacker.FinalAtk);
-                    players[defenderTeamId].TakeDamage(damageToPlayer);
-                }
+                if (target != null) ExecuteBasicAttack(attacker, target);
+                else players[defenderTeamId].TakeDamage(Mathf.RoundToInt(attacker.FinalAtk));
 
-                attacker.attackProgress -= 1f; // Reiniciamos restando 1 entero
+                attacker.attackProgress -= 1f;
             }
         }
     }
 
     private void ExecuteBasicAttack(Unit attacker, Unit target)
     {
-        // Aplicación estricta de la fórmula de daño mitigado
         float mitigationFactor = 100f / (100f + target.FinalDef);
         float realDamage = attacker.FinalAtk * mitigationFactor;
-
-        // Aplicar multiplicadores (Buffs/Debuffs)
         realDamage *= attacker.damageMultiplier;
         realDamage *= target.damageTakenMultiplier;
 
@@ -248,26 +208,39 @@ public class GameManager : MonoBehaviour
 
     private void ExecuteSkill(Unit caster, int enemyTeamId)
     {
+        OnUnitSkillCast?.Invoke(caster, caster.cardId);
+
         switch (caster.cardId)
         {
-            case CardID.SollarDuelist: // Corte Radiante
+            case CardID.SollarDuelist:
                 foreach (Unit enemy in activeUnits[enemyTeamId])
                 {
                     if (Vector2.Distance(caster.logicalPosition, enemy.logicalPosition) <= 2.5f)
-                    {
                         enemy.TakeDamage(30f);
-                        OnLogMessage?.Invoke(caster.ownerId, "Corte Radiante deal 30 AoE damage!");
-                    }
                 }
                 break;
-
-            case CardID.VoidHeavyShooter: // Modo Ráfaga (3 disparos de 25 dmg puro)
-                Unit target = GetClosestTarget(caster, enemyTeamId);
-                if (target != null)
+            case CardID.SollarForce:
+                Unit targetForce = GetClosestTarget(caster, enemyTeamId);
+                if (targetForce != null)
                 {
-                    target.TakeDamage(75f); // 3 * 25
-                    OnLogMessage?.Invoke(caster.ownerId, "Modo Ráfaga hit for 75 total damage!");
+                    targetForce.TakeDamage(30f);
+                    targetForce.stunTimer = 0.5f;
+                    targetForce.logicalPosition = new Vector2(targetForce.logicalPosition.x + 1.5f, targetForce.logicalPosition.y);
                 }
+                break;
+            case CardID.SollarCommander:
+                foreach (Unit ally in activeUnits[caster.ownerId])
+                {
+                    ally.damageMultiplier *= 1.20f;
+                }
+                break;
+            case CardID.VoidHeavyShooter:
+                Unit targetShooter = GetClosestTarget(caster, enemyTeamId);
+                if (targetShooter != null) targetShooter.TakeDamage(75f);
+                break;
+            case CardID.VoidCommander:
+                Unit targetCom = GetClosestTarget(caster, enemyTeamId);
+                if (targetCom != null) targetCom.damageTakenMultiplier = 1.25f;
                 break;
         }
     }
@@ -276,7 +249,6 @@ public class GameManager : MonoBehaviour
     {
         Unit bestTarget = null;
         float closestDist = float.MaxValue;
-
         foreach (Unit enemy in activeUnits[enemyTeamId])
         {
             if (enemy.IsDead) continue;
@@ -313,7 +285,6 @@ public class GameManager : MonoBehaviour
             if (p0Dead && p1Dead) LogMessage(-1, "Game Over: DRAW!");
             else if (p0Dead) LogMessage(-1, "Game Over: Void Dominion WINS!");
             else if (p1Dead) LogMessage(-1, "Game Over: Solar Alliance WINS!");
-            return;
         }
     }
 

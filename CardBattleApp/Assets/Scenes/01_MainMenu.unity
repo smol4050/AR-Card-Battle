@@ -2384,6 +2384,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: MainScripts::TutorialManager
   gameManager: {fileID: 1465123499}
+  aiController: {fileID: 1465123501}
 --- !u!114 &1465123497
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2399,6 +2400,7 @@ MonoBehaviour:
   gameManager: {fileID: 1465123499}
   prefabSolar: {fileID: 4966181914328345286, guid: 5fcb02baea8bf614a9fbc1549e81b69b, type: 3}
   prefabVoid: {fileID: 4966181914328345286, guid: 81cdd9a58cd9a3846a6fba982e923297, type: 3}
+  prefabVoidBullet: {fileID: 6888773692608800421, guid: 2ff449dc4c96e2e47b3543496ef6e8c6, type: 3}
   p0BoardArea: {fileID: 281000242}
   p1BoardArea: {fileID: 255053809}
 --- !u!114 &1465123498
@@ -2464,6 +2466,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TutorialAIController
   gameManager: {fileID: 1465123499}
+  currentDifficulty: 2
 --- !u!1 &1470251430
 GameObject:
   m_ObjectHideFlags: 0
