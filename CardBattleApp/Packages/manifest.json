@@ -1,5 +1,7 @@
 {
   "dependencies": {
+    "com.nianticlabs.lightship": "https://github.com/niantic-lightship/ardk-upm.git",
+    "com.nianticlabs.lightship.sharedar": "https://github.com/niantic-lightship/sharedar-upm.git",
     "com.unity.ai.navigation": "2.0.9",
     "com.unity.collab-proxy": "2.11.2",
     "com.unity.ide.rider": "3.0.38",
@@ -7,9 +9,11 @@
     "com.unity.inputsystem": "1.18.0",
     "com.unity.multiplayer.center": "1.0.1",
     "com.unity.render-pipelines.universal": "17.3.0",
+    "com.unity.sharp-zip-lib": "1.4.1",
     "com.unity.test-framework": "1.6.0",
     "com.unity.timeline": "1.8.10",
     "com.unity.ugui": "2.0.0",
+    "com.unity.vectorgraphics": "3.0.0-preview.7",
     "com.unity.visualscripting": "1.9.9",
     "com.unity.xr.arcore": "6.3.4",
     "com.unity.xr.arfoundation": "6.3.4",

@@ -15,8 +15,14 @@ EditorBuildSettings:
     path: Assets/Scenes/02_ARBattle.unity
     guid: af558cd3cae83d145b4ca334de2c9111
   m_configObjects:
+    Niantic.Lightship.AR.AuthBuildSettings: {fileID: 11400000, guid: 4393672ba1da1d341bc37120ff243db0, type: 2}
+    Niantic.Lightship.AR.LightshipSettings: {fileID: 11400000, guid: b9161e0eafd6383499ac83635cdf8d7c, type: 2}
+    NianticSpatial.NSDK.AR.AuthBuildSettings: {fileID: 0}
+    NianticSpatial.NSDK.AR.NsdkSettings: {fileID: 11400000, guid: 3676c8786cecd984cb614a02aab8f3ee, type: 2}
     UnityEditor.XR.ARCore.ARCoreSettings: {fileID: 11400000, guid: 047691970a7787f4b8a8202c9f0450b0, type: 2}
+    UnityEditor.XR.ARKit.ARKitSettings: {fileID: 11400000, guid: 35ae74197eea90d43b1bc0f6488d1719, type: 2}
     com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
     com.unity.xr.arfoundation.simulation_settings: {fileID: 11400000, guid: f71e4bb59345c3648b3805ab369eb2cc, type: 2}
     com.unity.xr.management.loader_settings: {fileID: 11400000, guid: c9c06477e00e00f4f93c2c26009b989b, type: 2}
+    com.unity.xr.openxr.settings4: {fileID: 11400000, guid: dbcae8363f224e04cb27472d2d481cef, type: 2}
   m_UseUCBPForAssetBundles: 0
