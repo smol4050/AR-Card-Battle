@@ -310,7 +310,7 @@ MonoBehaviour:
     m_Bits: 1
   m_VolumeTrigger: {fileID: 0}
   m_VolumeFrameworkUpdateModeOption: 2
-  m_RenderPostProcessing: 0
+  m_RenderPostProcessing: 1
   m_Antialiasing: 0
   m_AntialiasingQuality: 2
   m_StopNaN: 0
@@ -2714,6 +2714,8 @@ MonoBehaviour:
   - {fileID: 1525153820}
   - {fileID: 1494831465}
   - {fileID: 1578524378}
+  deathDestroyDelay: 2.5
+  hitParticlesDuration: 0.6
 --- !u!114 &1465123498
 MonoBehaviour:
   m_ObjectHideFlags: 0

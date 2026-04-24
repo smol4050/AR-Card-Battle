@@ -35,6 +35,25 @@ public class VisualController : MonoBehaviour
     public Transform[] p1FrontSlots = new Transform[3];
     public Transform[] p1BackSlots = new Transform[3];
 
+    // ── Parámetros del Animator (deben coincidir exactamente con los del controller) ──
+    // JovenController  → Velocidad (Float), Atacar (Trigger), Morir (Trigger)
+    // TropasController → Velocidad (Float), Atacar (Trigger), Morir (Trigger)
+    private static readonly int ANIM_VELOCIDAD = Animator.StringToHash("Velocidad");
+    private static readonly int ANIM_ATACAR = Animator.StringToHash("Atacar");
+    private static readonly int ANIM_NUM_ATAQUE = Animator.StringToHash("NumAtaque");
+    private static readonly int ANIM_MORIR = Animator.StringToHash("Morir");
+
+    // Cuánto tiempo esperar antes de destruir el GameObject tras morir
+    // (debe ser >= duración de la animación de muerte)
+    [Header("Configuración de Muerte")]
+    [Tooltip("Segundos que tarda en destruirse el personaje tras morir (ajusta según la animación)")]
+    public float deathDestroyDelay = 2.5f;
+
+    // Duración en segundos del efecto de partículas al golpear
+    [Header("Partículas de Golpe")]
+    [Tooltip("Cuántos segundos dura el sistema de partículas al impactar")]
+    public float hitParticlesDuration = 0.6f;
+
     private Dictionary<Unit, GameObject> _visualUnits = new Dictionary<Unit, GameObject>();
 
     // ─── SUSCRIPCIÓN ──────────────────────────────────────────────────────────
@@ -90,6 +109,14 @@ public class VisualController : MonoBehaviour
         _visualUnits[unitData] = newUnit;
         Vector3 offset = exactWorldPos - baseRotArea.position;
         unitData.logicalPosition = new Vector2(offset.x, offset.z);
+
+        // Asegurar que el personaje empiece en idle
+        Animator anim = newUnit.GetComponent<Animator>();
+        if (anim != null) anim.SetFloat(ANIM_VELOCIDAD, 0f);
+
+        // Asegurar que el sistema de partículas empiece apagado
+        ParticleSystem ps = newUnit.GetComponentInChildren<ParticleSystem>();
+        if (ps != null && ps.isPlaying) ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
     }
 
     private GameObject GetPrefabByCardId(CardID id)
@@ -109,11 +136,25 @@ public class VisualController : MonoBehaviour
     // ─── MUERTE ───────────────────────────────────────────────────────────────
     private void HandleUnitDied(int playerId, Unit unit)
     {
-        if (_visualUnits.TryGetValue(unit, out GameObject obj))
+        if (!_visualUnits.TryGetValue(unit, out GameObject obj)) return;
+        if (obj == null) { _visualUnits.Remove(unit); return; }
+
+        // Primero animar, DESPUÉS destruir con delay
+        Animator anim = obj.GetComponent<Animator>();
+        if (anim != null)
         {
-            if (obj != null) Destroy(obj);
-            _visualUnits.Remove(unit);
+            anim.SetFloat(ANIM_VELOCIDAD, 0f);
+            anim.SetTrigger(ANIM_MORIR);
         }
+
+        _visualUnits.Remove(unit);
+        StartCoroutine(DelayedDestroy(obj, deathDestroyDelay));
+    }
+
+    private IEnumerator DelayedDestroy(GameObject obj, float delay)
+    {
+        yield return new WaitForSeconds(delay);
+        if (obj != null) Destroy(obj);
     }
 
     // ─── EFECTO VISUAL GENÉRICO ───────────────────────────────────────────────
@@ -176,6 +217,14 @@ public class VisualController : MonoBehaviour
 
         if (casterObj == null || targetObj == null) yield break;
 
+        // Animación de disparo en el caster (solo en el primer proyectil para no spam)
+        if (projectileIndex == 0)
+        {
+            Animator casterAnim = casterObj.GetComponent<Animator>();
+            casterAnim?.SetTrigger(ANIM_ATACAR);
+        }
+
+
         UnitWorldUI ui = casterObj.GetComponent<UnitWorldUI>();
         Vector3 spawnPos = (ui != null && ui.shootPoint != null)
                            ? ui.shootPoint.position
@@ -213,6 +262,9 @@ public class VisualController : MonoBehaviour
 
         if (targetObj != null)
         {
+            // Partículas en el objetivo al recibir el golpe
+            PlayHitParticles(casterObj);
+
             if (prefabForceImpact != null)
                 Instantiate(prefabForceImpact, targetObj.transform.position + Vector3.up * 0.9f, Quaternion.identity);
 
@@ -228,9 +280,14 @@ public class VisualController : MonoBehaviour
     {
         if (attObj == null || defObj == null) yield break;
 
+        Animator anim = attObj.GetComponent<Animator>();
+
         Vector3 enemyPos = defObj.transform.position;
         Vector3 combatPos = enemyPos + (attObj.transform.position - enemyPos).normalized * range;
         combatPos.y = attObj.transform.position.y;
+
+        // Caminar
+        anim?.SetFloat(ANIM_VELOCIDAD, 1f);
 
         while (attObj != null && Vector3.Distance(attObj.transform.position, combatPos) > 0.1f)
         {
@@ -238,6 +295,7 @@ public class VisualController : MonoBehaviour
                 attObj.transform.position, combatPos, 8f * Time.deltaTime);
             yield return null;
         }
+        anim?.SetFloat(ANIM_VELOCIDAD, 0f);
 
         if (attObj == null || defObj == null) yield break;
 
@@ -254,6 +312,11 @@ public class VisualController : MonoBehaviour
             onImpact?.Invoke();
             yield break;
         }
+
+        // Disparar animación de ataque
+        Animator anim = attObj.GetComponent<Animator>();
+        anim?.SetFloat(ANIM_VELOCIDAD, 0f);
+        anim?.SetTrigger(ANIM_ATACAR);
 
         UnitWorldUI ui = attObj.GetComponent<UnitWorldUI>();
         Vector3 startPos = (ui != null && ui.shootPoint != null)
@@ -286,8 +349,14 @@ public class VisualController : MonoBehaviour
         // ── IMPACTO ───────────────────────────────────────────────────────────
         onImpact?.Invoke();
 
-        if (defObj != null && prefabForceImpact != null)
-            Instantiate(prefabForceImpact, defObj.transform.position + Vector3.up, Quaternion.identity);
+        if (defObj != null)
+        {
+            // Partículas en el objetivo
+            PlayHitParticles(defObj);
+
+            if (prefabForceImpact != null)
+                Instantiate(prefabForceImpact, defObj.transform.position + Vector3.up, Quaternion.identity);
+        }
     }
 
     // ─── ANIMACIÓN MELEE: acercarse y golpear ─────────────────────────────────
@@ -296,18 +365,31 @@ public class VisualController : MonoBehaviour
         GameObject attObj, GameObject defObj, Action onImpact)
     {
         if (attObj == null || defObj == null) yield break;
+        Animator anim = attObj.GetComponent<Animator>();
 
         Vector3 enemyPos = defObj.transform.position;
         Vector3 combatPos = enemyPos + (attObj.transform.position - enemyPos).normalized * 1.2f;
         combatPos.y = attObj.transform.position.y;
 
         // Caminar hacia el objetivo
+        anim?.SetFloat(ANIM_VELOCIDAD, 1f);
         while (attObj != null && Vector3.Distance(attObj.transform.position, combatPos) > 0.1f)
         {
             attObj.transform.position = Vector3.MoveTowards(
                 attObj.transform.position, combatPos, 8f * Time.deltaTime);
             yield return null;
         }
+        anim?.SetFloat(ANIM_VELOCIDAD, 0f);
+
+        if (attObj == null || defObj == null) yield break;
+
+        // Disparar animación de ataque (justo antes del lunge)
+        int variacion = UnityEngine.Random.Range(0, 2); // El 2 es exclusivo, devuelve 0 o 1
+        anim.SetInteger(ANIM_NUM_ATAQUE, variacion);
+        anim?.SetTrigger(ANIM_ATACAR);
+
+        // Pequeño delay para que la animación se vea antes del impacto
+        yield return new WaitForSeconds(0.2f);
 
         if (attObj == null || defObj == null) yield break;
 
@@ -324,17 +406,64 @@ public class VisualController : MonoBehaviour
         // ── IMPACTO: el puño llegó al objetivo ────────────────────────────────
         onImpact?.Invoke();
 
-        if (defObj != null && prefabForceImpact != null)
-            Instantiate(prefabForceImpact, defObj.transform.position + Vector3.up * 0.5f, Quaternion.identity);
+        if (defObj != null)
+        {
+            // Partículas en el objetivo
+            PlayHitParticles(defObj);
+
+            if (prefabForceImpact != null)
+                Instantiate(prefabForceImpact, defObj.transform.position + Vector3.up * 0.5f, Quaternion.identity);
+        }
 
         // Retirar el brazo
         if (attObj != null) attObj.transform.position = combatPos;
     }
 
+
+
+
+
+
+    // ─── PARTÍCULAS DE GOLPE ──────────────────────────────────────────────────
+    /// <summary>
+    /// Activa el sistema de partículas del personaje objetivo y lo apaga
+    /// automáticamente después de <see cref="hitParticlesDuration"/> segundos.
+    /// El ParticleSystem debe estar en el prefab del personaje (puede ser un hijo).
+    /// </summary>
+    private void PlayHitParticles(GameObject targetObj)
+    {
+        ParticleSystem[] allPS = targetObj.GetComponentsInChildren<ParticleSystem>(true);
+
+        foreach (ParticleSystem ps in allPS)
+        {
+            if (ps.CompareTag("WeaponVFX")) continue;
+
+            ps.Play();
+            // ¡Activa esta línea para obligar a las partículas a detenerse!
+            StartCoroutine(StopParticlesAfterDelay(ps, hitParticlesDuration));
+        }
+    }
+
+    private IEnumerator StopParticlesAfterDelay(ParticleSystem ps, float delay)
+    {
+        yield return new WaitForSeconds(delay);
+        if (ps != null) ps.Stop(true, ParticleSystemStopBehavior.StopEmitting);
+    }
+
+
+
+
+
+
+
     // ─── SKILL CAST (animaciones del caster) ──────────────────────────────────
     private void HandleUnitSkillCast(Unit caster, CardID skillId)
     {
         if (!_visualUnits.TryGetValue(caster, out GameObject casterObj) || casterObj == null) return;
+
+        // Siempre disparar la animación de ataque en el skill
+        Animator anim = casterObj.GetComponent<Animator>();
+        anim?.SetTrigger(ANIM_ATACAR);
 
         switch (skillId)
         {

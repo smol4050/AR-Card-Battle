@@ -328,6 +328,7 @@ GameObject:
   m_Component:
   - component: {fileID: 7478002095200067321}
   - component: {fileID: 2170292097217645451}
+  - component: {fileID: 8076613894256426704}
   m_Layer: 0
   m_Name: Heavy_Void
   m_TagString: Untagged
@@ -367,6 +368,28 @@ MonoBehaviour:
   nameText: {fileID: 4365787844940240668}
   healthFill: {fileID: 7315181828579554678}
   shootPoint: {fileID: 8084865230473204924}
+--- !u!95 &8076613894256426704
+Animator:
+  serializedVersion: 7
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5958500295921118325}
+  m_Enabled: 1
+  m_Avatar: {fileID: 9000000, guid: 3e5b0ce5ee8325346924506b82a4a89b, type: 3}
+  m_Controller: {fileID: 9100000, guid: 76e27efabcd86154b9ce4a38d09c551e, type: 2}
+  m_CullingMode: 1
+  m_UpdateMode: 0
+  m_ApplyRootMotion: 0
+  m_LinearVelocityBlending: 0
+  m_StabilizeFeet: 0
+  m_AnimatePhysics: 0
+  m_WarningMessage: 
+  m_HasTransformHierarchy: 1
+  m_AllowConstantClipSamplingOptimization: 1
+  m_KeepAnimatorStateOnDisable: 0
+  m_WriteDefaultValuesOnDisable: 0
 --- !u!1 &7415267277302263913
 GameObject:
   m_ObjectHideFlags: 0
@@ -531,6 +554,10 @@ PrefabInstance:
       propertyPath: m_Controller
       value: 
       objectReference: {fileID: 9100000, guid: 76e27efabcd86154b9ce4a38d09c551e, type: 2}
+    - target: {fileID: 5866666021909216657, guid: 3e5b0ce5ee8325346924506b82a4a89b, type: 3}
+      propertyPath: m_ApplyRootMotion
+      value: 0
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects:
