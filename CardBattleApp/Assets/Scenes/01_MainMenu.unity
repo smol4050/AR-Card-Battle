@@ -2693,7 +2693,9 @@ MonoBehaviour:
   prefabVoidCommander: {fileID: 5958500295921118325, guid: e09945c28a64dd4418066d26d138b8ed, type: 3}
   prefabVoidHeavyShooter: {fileID: 5958500295921118325, guid: 2d63dab9db22458448421a0a7faa7f06, type: 3}
   prefabVoidBullet: {fileID: 6888773692608800421, guid: 2ff449dc4c96e2e47b3543496ef6e8c6, type: 3}
+  prefabSollarBullet: {fileID: 6888773692608800421, guid: 114f6466558b05b4da713e606aa5376a, type: 3}
   prefabForceImpact: {fileID: 0}
+  prefabStaggerFX: {fileID: 0}
   p0BoardArea: {fileID: 281000242}
   p1BoardArea: {fileID: 255053809}
   p0FrontSlots:
