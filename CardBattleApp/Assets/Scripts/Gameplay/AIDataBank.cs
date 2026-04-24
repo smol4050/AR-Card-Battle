@@ -4,15 +4,22 @@ using System.IO;
 using System.Linq;
 
 [System.Serializable]
+public class AISlotDecision
+{
+    public CardID cardId;
+    public int slotIndex; // De 0 a 5
+}
+
+[System.Serializable]
 public class AIBoardState
 {
-    public List<CardID> aiArmy; // La combinación que la IA compró
-    public float winWeight;     // Puntuación de éxito (Mayor = Mejor)
+    public List<AISlotDecision> decisions; // Lista de (Qué, Dónde)
+    public float winWeight;
 
-    public AIBoardState(List<CardID> army, float initialWeight)
+    public AIBoardState(List<AISlotDecision> decisions, float initialWeight)
     {
-        aiArmy = new List<CardID>(army);
-        winWeight = initialWeight;
+        this.decisions = new List<AISlotDecision>(decisions);
+        this.winWeight = initialWeight;
     }
 }
 
@@ -24,7 +31,7 @@ public class AIDatabase
 
 public static class AIDataBank
 {
-    private static string _savePath = Application.persistentDataPath + "/AIBrain.json";
+    private static string _savePath = Application.persistentDataPath + "/AIBrain_v2.json";
     private static AIDatabase _currentDB = new AIDatabase();
 
     public static void LoadBrain()
@@ -33,70 +40,33 @@ public static class AIDataBank
         {
             string json = File.ReadAllText(_savePath);
             _currentDB = JsonUtility.FromJson<AIDatabase>(json);
-            Debug.Log("AI Brain Loaded! Memorized states: " + _currentDB.historicalStates.Count);
-        }
-        else
-        {
-            Debug.Log("No previous AI Brain found. Creating new consciousness...");
         }
     }
 
-    public static void SaveBrain()
-    {
-        string json = JsonUtility.ToJson(_currentDB, true);
-        File.WriteAllText(_savePath, json);
-    }
-
-    // Busca la mejor composición histórica. Si no hay datos, retorna null.
-    public static List<CardID> GetBestHistoricalArmy()
+    public static List<AISlotDecision> GetBestHistoricalArmy()
     {
         if (_currentDB.historicalStates.Count == 0) return null;
-
-        // Ordena de mayor a menor peso y toma la mejor
-        var bestState = _currentDB.historicalStates.OrderByDescending(s => s.winWeight).First();
-
-        // Si la mejor estrategia tiene peso negativo (es decir, todas son malísimas), forzamos a intentar algo nuevo
-        if (bestState.winWeight <= 0) return null;
-
-        return new List<CardID>(bestState.aiArmy);
+        var best = _currentDB.historicalStates.OrderByDescending(s => s.winWeight).FirstOrDefault();
+        return (best != null && best.winWeight > 0) ? best.decisions : null;
     }
 
-    // Actualiza la base de datos tras una batalla
-    public static void RecordBattleResult(List<CardID> usedArmy, bool didAIWin)
+    public static void RecordBattleResult(List<AISlotDecision> battleDecisions, bool didAIWin)
     {
-        // 1. Convertimos la lista a un formato ordenado para compararla fácilmente
-        var sortedArmy = new List<CardID>(usedArmy);
-        sortedArmy.Sort();
+        float weightDelta = didAIWin ? 1.0f : -0.5f;
 
-        // 2. Buscamos si ya tenemos esta combinación en la memoria
-        AIBoardState existingState = null;
-        foreach (var state in _currentDB.historicalStates)
-        {
-            var sortedStateArmy = new List<CardID>(state.aiArmy);
-            sortedStateArmy.Sort();
+        // Buscamos si esta configuración exacta de posiciones ya existe
+        var existing = _currentDB.historicalStates.Find(s => IsSameStrategy(s.decisions, battleDecisions));
 
-            if (sortedStateArmy.SequenceEqual(sortedArmy))
-            {
-                existingState = state;
-                break;
-            }
-        }
+        if (existing != null) existing.winWeight += weightDelta;
+        else _currentDB.historicalStates.Add(new AIBoardState(battleDecisions, weightDelta));
 
-        // 3. Ajustamos los pesos (Mahoraga Adaptation)
-        float weightDelta = didAIWin ? 1.0f : -0.5f; // Gana: Sube 1 punto. Pierde: Baja 0.5 puntos.
+        File.WriteAllText(_savePath, JsonUtility.ToJson(_currentDB, true));
+    }
 
-        if (existingState != null)
-        {
-            existingState.winWeight += weightDelta;
-            Debug.Log($"AI adapted: Strategy recognized. New weight: {existingState.winWeight}");
-        }
-        else
-        {
-            // Nueva estrategia, la añadimos a la base de datos
-            _currentDB.historicalStates.Add(new AIBoardState(usedArmy, weightDelta));
-            Debug.Log($"AI adapted: New strategy recorded. Weight: {weightDelta}");
-        }
-
-        SaveBrain();
+    private static bool IsSameStrategy(List<AISlotDecision> a, List<AISlotDecision> b)
+    {
+        if (a.Count != b.Count) return false;
+        // Compara si todos los pares (Carta, Slot) coinciden
+        return a.All(da => b.Any(db => db.cardId == da.cardId && db.slotIndex == da.slotIndex));
     }
 }

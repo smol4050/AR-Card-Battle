@@ -1,5 +1,4 @@
 using UnityEngine;
-using System.Collections;
 using System.Collections.Generic;
 
 public class TutorialAIController : MonoBehaviour
@@ -9,139 +8,115 @@ public class TutorialAIController : MonoBehaviour
     [SerializeField] private GameManager gameManager;
     public AIDifficulty currentDifficulty = AIDifficulty.Superior;
 
-    private readonly int _aiPlayerId = 1;
+    [Header("Zonas de Despliegue")]
+    public Transform[] frontSlots = new Transform[3];
+    public Transform[] backSlots = new Transform[3];
+
+    private List<AISlotDecision> _currentDecisions = new List<AISlotDecision>();
     private bool _isActive = false;
-
-    private readonly int _maxUnits = 6;
-    private readonly float _boardRadiusX = 2f;
-    private readonly float _boardRadiusY = 1.5f;
-
-    // Memoria a corto plazo de lo que compró en esta ronda
-    private List<CardID> _armyPurchasedThisRound = new List<CardID>();
 
     public void ActivateAI()
     {
         _isActive = true;
-        AIDataBank.LoadBrain(); // Carga la memoria persistente
-
-        gameManager.OnPhaseChanged += HandlePhaseChanged;
+        AIDataBank.LoadBrain();
+        gameManager.OnPhaseChanged += (phase) => {
+            if (phase == RoundPhase.Preparation) ExecuteDecisionLogic();
+            if (phase == RoundPhase.End) EvaluateResult();
+        };
     }
 
     private void OnDisable()
     {
         if (gameManager != null)
         {
-            gameManager.OnPhaseChanged -= HandlePhaseChanged;
-        }
-    }
-
-    private void HandlePhaseChanged(RoundPhase phase)
-    {
-        if (!_isActive) return;
-
-        if (phase == RoundPhase.Preparation)
-        {
-            _armyPurchasedThisRound.Clear();
-            ExecuteDecisionLogic();
-            gameManager.SetPlayerReady(_aiPlayerId);
-        }
-        else if (phase == RoundPhase.End)
-        {
-            EvaluateBattleResult();
+            gameManager.OnPhaseChanged -= (phase) => { }; // Desuscripción genérica
         }
     }
 
     public void ExecuteDecisionLogic()
     {
-        int currentEnergy = gameManager.players[_aiPlayerId].energy;
-        List<CardID> targetArmy = null;
+        if (gameManager.currentPhase != RoundPhase.Preparation) return;
 
-        // Si es Superior o Normal, consulta la memoria histórica
-        if (currentDifficulty != AIDifficulty.Beginner)
-        {
-            targetArmy = AIDataBank.GetBestHistoricalArmy();
-        }
+        _currentDecisions.Clear();
+        int energy = gameManager.players[1].energy;
 
-        // Si encontró una estrategia ganadora en memoria, intenta ejecutarla (Modo Mahoraga)
-        if (targetArmy != null && targetArmy.Count > 0)
+        var bestStrategy = AIDataBank.GetBestHistoricalArmy();
+        if (bestStrategy != null && currentDifficulty != AIDifficulty.Beginner)
         {
-            Debug.Log("AI using memory: Executing historical winning strategy!");
-            foreach (CardID card in targetArmy)
+            foreach (var decision in bestStrategy)
             {
-                if (currentEnergy <= 0) break;
-
-                if (AttemptPurchase(card, out int cost))
-                {
-                    currentEnergy -= cost;
-                }
+                if (energy <= 0) break;
+                if (PlaceUnit(decision.cardId, decision.slotIndex)) energy--;
             }
         }
 
-        // Si sobró energía (o es Principiante, o no tenía memoria), rellena aleatoriamente
-        while (currentEnergy > 0 && GetCurrentUnitCount() < _maxUnits)
+        while (energy > 0 && _currentDecisions.Count < 6)
         {
-            CardID randomCard = DecideNextRandomCard();
+            CardID nextCard = DecideNextCard();
+            int bestSlot = FindBestSlotForRole(nextCard);
 
-            if (AttemptPurchase(randomCard, out int cost))
-            {
-                currentEnergy -= cost;
-            }
-            else
-            {
-                break; // Fallback de seguridad
-            }
+            if (bestSlot != -1 && PlaceUnit(nextCard, bestSlot)) energy--;
+            else break;
         }
+
+        gameManager.SetPlayerReady(1);
     }
 
-    private bool AttemptPurchase(CardID chosenCard, out int cost)
+    private int FindBestSlotForRole(CardID card)
     {
-        cost = 1; // Para el prototipo todas cuestan 1
+        bool isFrontline = card == CardID.VoidHorde || card == CardID.SollarDuelist || card == CardID.SollarForce;
+        int start = isFrontline ? 0 : 3;
+        int end = isFrontline ? 3 : 6;
 
-        // Validación de Límite de Tablero
-        int projectedCount = GetCurrentUnitCount() + ((chosenCard == CardID.VoidHorde) ? 4 : 1);
-        if (projectedCount > _maxUnits)
+        for (int i = start; i < end; i++)
         {
-            chosenCard = CardID.VoidHeavyShooter; // Corrección forzosa
+            if (!_currentDecisions.Exists(d => d.slotIndex == i)) return i;
         }
 
-        Vector2 randomSpawn = new Vector2(
-            Random.Range(-_boardRadiusX, _boardRadiusX),
-            Random.Range(0.5f, _boardRadiusY)
-        );
-
-        if (gameManager.PlayCard(_aiPlayerId, chosenCard, randomSpawn, cost))
+        for (int i = 0; i < 6; i++)
         {
-            _armyPurchasedThisRound.Add(chosenCard);
-            gameManager.LogMessage(_aiPlayerId, $"AI purchased {chosenCard}");
+            if (!_currentDecisions.Exists(d => d.slotIndex == i)) return i;
+        }
+
+        return -1;
+    }
+
+    private bool PlaceUnit(CardID card, int slot)
+    {
+        int row = (slot < 3) ? 0 : 1;
+        Transform t = (slot < 3) ? frontSlots[slot] : backSlots[slot - 3];
+
+        // Extracción precisa usando BoxCollider
+        Vector2 pos;
+        BoxCollider box = t.GetComponent<BoxCollider>();
+        if (box != null)
+        {
+            pos = new Vector2(t.localPosition.x + box.center.x, t.localPosition.z + box.center.z);
+        }
+        else
+        {
+            pos = new Vector2(t.localPosition.x, t.localPosition.z);
+        }
+
+        if (gameManager.PlayCard(1, card, pos, row, slot, 1))
+        {
+            _currentDecisions.Add(new AISlotDecision { cardId = card, slotIndex = slot });
             return true;
         }
         return false;
     }
 
-    private int GetCurrentUnitCount()
+    private CardID DecideNextCard()
     {
-        return gameManager.activeUnits[_aiPlayerId].Count;
-    }
-
-    private CardID DecideNextRandomCard()
-    {
-        bool hasCommander = _armyPurchasedThisRound.Contains(CardID.VoidCommander);
-
-        if (!hasCommander && Random.value > 0.6f) return CardID.VoidCommander;
+        bool hasCmd = _currentDecisions.Exists(d => d.cardId == CardID.VoidCommander);
+        if (!hasCmd && Random.value > 0.7f) return CardID.VoidCommander;
         return (Random.value > 0.5f) ? CardID.VoidHorde : CardID.VoidHeavyShooter;
     }
 
-    // --- EVALUACIÓN DE BATALLA (MAHORAGA SYSTEM) ---
-    private void EvaluateBattleResult()
+    private void EvaluateResult()
     {
-        if (_armyPurchasedThisRound.Count == 0) return;
-
-        // Determina si la IA ganó (Si el jugador local tiene 0 hp o 0 unidades)
-        bool aiWon = gameManager.players[0].hp <= 0 || gameManager.activeUnits[0].Count == 0;
-
-        Debug.Log($"AI Battle Over. AI Won: {aiWon}. Recording strategy to DataBank...");
-
-        // Envía el reporte al cerebro persistente
-        AIDataBank.RecordBattleResult(_armyPurchasedThisRound, aiWon);
+        if (_currentDecisions.Count == 0) return;
+        bool win = gameManager.players[0].hp <= 0 || gameManager.activeUnits[0].Count == 0;
+        AIDataBank.RecordBattleResult(_currentDecisions, win);
     }
 }

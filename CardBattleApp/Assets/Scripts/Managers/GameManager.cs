@@ -62,10 +62,17 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    // Instancia EXCLUSIVAMENTE las 6 unidades base
-    public bool PlayCard(int playerId, CardID cardId, Vector2 spawnPos, int cost = 1)
+    public bool PlayCard(int playerId, CardID cardId, Vector2 spawnPos, int row, int slotIndex, int cost = 1)
     {
         if (currentPhase != RoundPhase.Preparation) return false;
+
+        // NUEVO: Validación de Casilla Única. Rechaza la compra si ya hay una unidad viva allí.
+        if (activeUnits[playerId].Exists(u => u.slotIndex == slotIndex && !u.IsDead))
+        {
+            LogMessage(playerId, $"Slot {slotIndex} is already occupied!");
+            return false;
+        }
+
         if (!players[playerId].ConsumeEnergy(cost)) return false;
 
         int spawnCount = (cardId == CardID.VoidHorde) ? 4 : 1;
@@ -78,26 +85,27 @@ public class GameManager : MonoBehaviour
             switch (cardId)
             {
                 case CardID.SollarDuelist:
-                    newUnit = new Unit(playerId, cardId, 180f, 38f, 40f, 0.95f, finalPos);
+                    newUnit = new Unit(playerId, cardId, row, slotIndex, 180f, 38f, 40f, 0.95f, finalPos);
                     newUnit.skillCooldown = 6f;
                     break;
                 case CardID.SollarForce:
-                    newUnit = new Unit(playerId, cardId, 140f, 20f, 35f, 0.85f, finalPos);
+                    newUnit = new Unit(playerId, cardId, row, slotIndex, 140f, 20f, 35f, 0.85f, finalPos);
                     newUnit.skillCooldown = 5f;
                     break;
                 case CardID.SollarCommander:
-                    newUnit = new Unit(playerId, cardId, 160f, 28f, 35f, 0.85f, finalPos);
+                    newUnit = new Unit(playerId, cardId, row, slotIndex, 160f, 28f, 35f, 0.85f, finalPos);
                     newUnit.skillCooldown = 8f;
                     break;
                 case CardID.VoidHorde:
-                    newUnit = new Unit(playerId, cardId, 55f, 15f, 10f, 1.25f, finalPos);
+                    // La Horda inyectará el MISMO slotIndex a sus 4 individuos, reclamando la casilla para el escuadrón completo
+                    newUnit = new Unit(playerId, cardId, row, slotIndex, 50f, 15f, 10f, 1.25f, finalPos);
                     break;
                 case CardID.VoidCommander:
-                    newUnit = new Unit(playerId, cardId, 150f, 30f, 30f, 0.9f, finalPos);
+                    newUnit = new Unit(playerId, cardId, row, slotIndex, 180f, 30f, 30f, 0.9f, finalPos);
                     newUnit.skillCooldown = 7f;
                     break;
                 case CardID.VoidHeavyShooter:
-                    newUnit = new Unit(playerId, cardId, 120f, 60f, 20f, 0.8f, finalPos);
+                    newUnit = new Unit(playerId, cardId, row, slotIndex, 120f, 60f, 20f, 1.0f, finalPos);
                     newUnit.skillCooldown = 6f;
                     break;
             }
@@ -125,6 +133,7 @@ public class GameManager : MonoBehaviour
 
     private void UpdateAurasAndPassives()
     {
+        // 1. Limpieza base
         foreach (var list in activeUnits)
         {
             foreach (var u in list)
@@ -134,6 +143,7 @@ public class GameManager : MonoBehaviour
             }
         }
 
+        // 2. Fuego Coordinado (Void Horde Multiplier)
         int hordeCount = activeUnits[1].FindAll(u => u.cardId == CardID.VoidHorde).Count;
         float hordeMultiplier = 1f;
         if (hordeCount == 2) hordeMultiplier = 1.20f;
@@ -142,8 +152,15 @@ public class GameManager : MonoBehaviour
 
         foreach (Unit u in activeUnits[1])
         {
-            if (u.cardId == CardID.VoidHorde) u.damageMultiplier *= hordeMultiplier;
-            if (u.cardId == CardID.VoidCommander) u.bonusSpeed += (activeUnits[1].Count * 0.05f);
+            if (u.cardId == CardID.VoidHorde)
+            {
+                u.damageMultiplier *= hordeMultiplier;
+            }
+            if (u.cardId == CardID.VoidCommander)
+            {
+                // BUFF: Ahora otorga 8% (0.08f) por unidad en lugar de 5% (0.05f)
+                u.bonusSpeed += (activeUnits[1].Count * 0.08f);
+            }
         }
     }
 
@@ -249,9 +266,21 @@ public class GameManager : MonoBehaviour
     {
         Unit bestTarget = null;
         float closestDist = float.MaxValue;
+
+        // 1. Verificar si la Primera Línea (row 0) del enemigo sigue viva
+        bool isFrontlineAlive = activeUnits[enemyTeamId].Exists(u => !u.IsDead && u.row == 0);
+
+        // 2. Establecer la línea objetivo: Si hay frente, se ataca el frente. Si no, se avanza a la retaguardia.
+        int targetRow = isFrontlineAlive ? 0 : 1;
+
+        // 3. Buscar al enemigo más cercano DENTRO de la línea objetivo
         foreach (Unit enemy in activeUnits[enemyTeamId])
         {
             if (enemy.IsDead) continue;
+
+            // FILTRO DE FOCUS: Ignoramos al enemigo si no pertenece a la línea que debemos atacar
+            if (enemy.row != targetRow) continue;
+
             float dist = Vector2.Distance(attacker.logicalPosition, enemy.logicalPosition);
             if (dist < closestDist)
             {

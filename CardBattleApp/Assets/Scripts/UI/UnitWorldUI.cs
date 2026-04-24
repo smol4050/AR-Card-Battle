@@ -6,14 +6,14 @@ public class UnitWorldUI : MonoBehaviour
 {
     [Header("UI References")]
     public TextMeshProUGUI nameText;
-    public Image healthFill; // Debe estar configurado como Image Type: Filled
+    public Image healthFill;
 
-    // Referencia a la entidad matemática que rastrea
+    [Header("Combat References")]
+    [Tooltip("Arrastra aquí un objeto vacío posicionado en la punta del arma.")]
+    public Transform shootPoint; // NUEVO: Punto exacto de salida de la bala
+
     private Unit _trackedUnit;
 
-    /// <summary>
-    /// Enlaza este visualizador con los datos lógicos del GameManager.
-    /// </summary>
     public void Initialize(Unit unitData)
     {
         _trackedUnit = unitData;
@@ -26,10 +26,8 @@ public class UnitWorldUI : MonoBehaviour
 
     private void Update()
     {
-        // Actualizamos la barra de vida constantemente si la unidad sigue viva
         if (_trackedUnit != null && healthFill != null)
         {
-            // Evitamos divisiones por cero por seguridad
             if (_trackedUnit.maxHp > 0)
             {
                 healthFill.fillAmount = _trackedUnit.currentHp / _trackedUnit.maxHp;
