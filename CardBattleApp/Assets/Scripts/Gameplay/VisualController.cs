@@ -1,4 +1,5 @@
 using UnityEngine;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 
@@ -18,69 +19,75 @@ public class VisualController : MonoBehaviour
 
     [Header("VFX Prefabs")]
     public GameObject prefabVoidBullet;
-    public GameObject prefabForceImpact; // Partículas para la Fuerza
+    public GameObject prefabSollarBullet;
+    public GameObject prefabForceImpact;
+    public GameObject prefabStaggerFX;
 
-    [Header("Áreas Base (Para UI/Rotación General)")]
+    [Header("Áreas Base")]
     public Transform p0BoardArea;
     public Transform p1BoardArea;
 
-    [Header("Posiciones Reales del Tablero P0 (Local)")]
+    [Header("Slots P0")]
     public Transform[] p0FrontSlots = new Transform[3];
     public Transform[] p0BackSlots = new Transform[3];
 
-    [Header("Posiciones Reales del Tablero P1 (IA)")]
+    [Header("Slots P1")]
     public Transform[] p1FrontSlots = new Transform[3];
     public Transform[] p1BackSlots = new Transform[3];
 
     private Dictionary<Unit, GameObject> _visualUnits = new Dictionary<Unit, GameObject>();
 
+    // ─── SUSCRIPCIÓN ──────────────────────────────────────────────────────────
     private void OnEnable()
     {
         gameManager.OnUnitSpawned += HandleUnitSpawned;
         gameManager.OnUnitDied += HandleUnitDied;
-        gameManager.OnUnitAttacked += HandleUnitAttacked;
         gameManager.OnUnitSkillCast += HandleUnitSkillCast;
         gameManager.OnVisualEffectRequested += HandleVisualEffectRequested;
+        gameManager.OnAttackAnimationRequested += HandleAttackAnimationRequested;
+        gameManager.OnSOL9ProjectileRequested += HandleSOL9ProjectileRequested;
     }
 
     private void OnDisable()
     {
+        if (gameManager == null) return;
         gameManager.OnUnitSpawned -= HandleUnitSpawned;
         gameManager.OnUnitDied -= HandleUnitDied;
-        gameManager.OnUnitAttacked -= HandleUnitAttacked;
         gameManager.OnUnitSkillCast -= HandleUnitSkillCast;
         gameManager.OnVisualEffectRequested -= HandleVisualEffectRequested;
+        gameManager.OnAttackAnimationRequested -= HandleAttackAnimationRequested;
+        gameManager.OnSOL9ProjectileRequested -= HandleSOL9ProjectileRequested;
     }
 
+    // ─── SPAWN ────────────────────────────────────────────────────────────────
     private void HandleUnitSpawned(int playerId, Unit unitData)
     {
         GameObject prefabToUse = GetPrefabByCardId(unitData.cardId);
         if (prefabToUse == null) return;
 
-        Vector3 exactWorldPos = Vector3.zero;
-
+        Vector3 exactWorldPos;
         if (playerId == 0)
         {
-            Transform targetSlot = (unitData.row == 0) ? p0FrontSlots[unitData.slotIndex] : p0BackSlots[unitData.slotIndex - 3];
-            BoxCollider box = targetSlot.GetComponent<BoxCollider>();
-            exactWorldPos = (box != null) ? targetSlot.TransformPoint(box.center) : targetSlot.position;
+            Transform slot = (unitData.row == 0)
+                ? p0FrontSlots[unitData.slotIndex]
+                : p0BackSlots[unitData.slotIndex - 3];
+            exactWorldPos = slot.position;
         }
         else
         {
-            Transform targetSlot = (unitData.row == 0) ? p1FrontSlots[unitData.slotIndex] : p1BackSlots[unitData.slotIndex - 3];
-            BoxCollider box = targetSlot.GetComponent<BoxCollider>();
-            exactWorldPos = (box != null) ? targetSlot.TransformPoint(box.center) : targetSlot.position;
+            Transform slot = (unitData.row == 0)
+                ? p1FrontSlots[unitData.slotIndex]
+                : p1BackSlots[unitData.slotIndex - 3];
+            exactWorldPos = slot.position;
         }
 
         Transform baseRotArea = (playerId == 0) ? p0BoardArea : p1BoardArea;
         GameObject newUnit = Instantiate(prefabToUse, exactWorldPos, baseRotArea.rotation);
 
-        UnitWorldUI uiComponent = newUnit.GetComponent<UnitWorldUI>();
-        if (uiComponent != null) uiComponent.Initialize(unitData);
+        UnitWorldUI ui = newUnit.GetComponent<UnitWorldUI>();
+        if (ui != null) ui.Initialize(unitData);
 
         _visualUnits[unitData] = newUnit;
-
-        // Sincronización lógica inicial
         Vector3 offset = exactWorldPos - baseRotArea.position;
         unitData.logicalPosition = new Vector2(offset.x, offset.z);
     }
@@ -99,230 +106,290 @@ public class VisualController : MonoBehaviour
         }
     }
 
+    // ─── MUERTE ───────────────────────────────────────────────────────────────
     private void HandleUnitDied(int playerId, Unit unit)
     {
-        if (_visualUnits.TryGetValue(unit, out GameObject objToDestroy))
+        if (_visualUnits.TryGetValue(unit, out GameObject obj))
         {
-            Destroy(objToDestroy);
+            if (obj != null) Destroy(obj);
             _visualUnits.Remove(unit);
         }
     }
 
+    // ─── EFECTO VISUAL GENÉRICO ───────────────────────────────────────────────
     private void HandleVisualEffectRequested(Unit caster, Unit target, string effectName)
     {
         if (target != null && _visualUnits.TryGetValue(target, out GameObject targetObj))
         {
+            if (targetObj == null) return;
             if (effectName == "ForceHit" && prefabForceImpact != null)
-            {
-                Vector3 impactPos = targetObj.transform.position + Vector3.up;
-                Instantiate(prefabForceImpact, impactPos, Quaternion.identity);
-            }
+                Instantiate(prefabForceImpact, targetObj.transform.position + Vector3.up, Quaternion.identity);
         }
     }
 
-    private void HandleUnitAttacked(Unit attacker, Unit defender, float damageReal)
+    // ─── ATAQUE BÁSICO (RANGED Y MELEE) ──────────────────────────────────────
+    // Recibe el callback onImpact del GameManager y lo ejecuta cuando la
+    // bala llega al objetivo o cuando el puño conecta en la animación melee.
+    private void HandleAttackAnimationRequested(Unit attacker, Unit target, Action onImpact)
     {
-        if (_visualUnits.TryGetValue(attacker, out GameObject attackerObj) &&
-            _visualUnits.TryGetValue(defender, out GameObject defenderObj))
+        if (!_visualUnits.TryGetValue(attacker, out GameObject attObj) || attObj == null) return;
+        if (!_visualUnits.TryGetValue(target, out GameObject defObj) || defObj == null) return;
+
+        // Mirar al objetivo
+        Vector3 targetPos = defObj.transform.position;
+        attObj.transform.LookAt(new Vector3(targetPos.x, attObj.transform.position.y, targetPos.z));
+
+        UnitWorldUI ui = attObj.GetComponent<UnitWorldUI>();
+        bool isRanged = ui != null && ui.shootPoint != null;
+        float distance = Vector3.Distance(attObj.transform.position, targetPos);
+        float maxRangedDist = 4.5f;
+
+        if (isRanged)
         {
-            Vector3 targetPos = defenderObj.transform.position;
-            Vector3 lookPosition = new Vector3(targetPos.x, attackerObj.transform.position.y, targetPos.z);
-            attackerObj.transform.LookAt(lookPosition);
-
-            // CORRECCIÓN DE ROLES VISUALES:
-            // Ahora la Horda, el Tirador Pesado y Sollar Force son los únicos con armas a distancia.
-            // Sollar Commander y Sollar Duelist van a cuerpo a cuerpo.
-            bool isWeaponRanged = attacker.cardId == CardID.VoidHorde ||
-                                  attacker.cardId == CardID.VoidHeavyShooter ||
-                                  attacker.cardId == CardID.SollarForce;
-
-            float distanceToTarget = Vector3.Distance(attackerObj.transform.position, targetPos);
-            float maxRangedDistance = 4.5f;
-
-            if (isWeaponRanged)
-            {
-                if (distanceToTarget > maxRangedDistance)
-                {
-                    StartCoroutine(AnimateWalkToRangeAndAttack(attacker, attackerObj, defenderObj, maxRangedDistance, true));
-                }
-                else
-                {
-                    ExecuteRangedVisuals(attackerObj, defenderObj, true);
-                }
-            }
+            if (distance > maxRangedDist)
+                StartCoroutine(AnimateWalkToRangeAndShoot(attObj, defObj, maxRangedDist, onImpact));
             else
-            {
-                // Todos los Melee (Duelist, SollarCommander, VoidCommander) corren a golpear
-                StartCoroutine(AnimateMeleeWalkAndStrike(attacker, attackerObj.transform, defenderObj.transform.position));
-            }
-        }
-    }
-
-    private void HandleUnitSkillCast(Unit caster, CardID skillId)
-    {
-        if (_visualUnits.TryGetValue(caster, out GameObject casterObj))
-        {
-            switch (skillId)
-            {
-                case CardID.SollarDuelist: StartCoroutine(AnimateSpin(casterObj.transform)); break;
-                case CardID.VoidHeavyShooter: StartCoroutine(AnimateShake(casterObj.transform)); break;
-                case CardID.SollarCommander:
-                case CardID.VoidCommander:
-                case CardID.SollarForce: StartCoroutine(AnimatePulse(casterObj.transform)); break;
-            }
-        }
-    }
-
-    private void ExecuteRangedVisuals(GameObject attackerObj, GameObject defenderObj, bool shootProjectile)
-    {
-        if (shootProjectile && prefabVoidBullet != null)
-        {
-            Vector3 shootStartPos = attackerObj.transform.position + Vector3.up;
-            UnitWorldUI uiData = attackerObj.GetComponent<UnitWorldUI>();
-            if (uiData != null && uiData.shootPoint != null) shootStartPos = uiData.shootPoint.position;
-
-            Vector3 shootTargetPos = defenderObj.transform.position + Vector3.up;
-            StartCoroutine(AnimateProjectile(shootStartPos, shootTargetPos));
+                StartCoroutine(AnimateProjectileWithImpact(attObj, defObj, onImpact));
         }
         else
         {
-            // Sollar Force
-            StartCoroutine(AnimatePulse(attackerObj.transform));
+            StartCoroutine(AnimateMeleeWalkAndStrike(attObj, defObj, onImpact));
         }
     }
 
-    private IEnumerator AnimateWalkToRangeAndAttack(Unit attacker, GameObject attackerObj, GameObject defenderObj, float range, bool shootProjectile)
+    // ─── SOL-9 DISRUPTION BARRAGE ─────────────────────────────────────────────
+    // Cada proyectil lleva su propio callback: el daño ocurre al llegar.
+    private void HandleSOL9ProjectileRequested(Unit caster, Unit target, int projectileIndex, Action onImpact)
     {
-        Transform attackerTransform = attackerObj.transform;
-        Vector3 originalPosition = attackerTransform.position;
-        Vector3 enemyPosition = defenderObj.transform.position;
+        if (!_visualUnits.TryGetValue(caster, out GameObject casterObj) || casterObj == null) return;
+        if (!_visualUnits.TryGetValue(target, out GameObject targetObj) || targetObj == null) return;
 
-        Vector3 combatPosition = enemyPosition + (originalPosition - enemyPosition).normalized * range;
-        combatPosition.y = originalPosition.y;
-
-        float walkSpeed = 8f;
-
-        while (Vector3.Distance(attackerTransform.position, combatPosition) > 0.1f)
-        {
-            attackerTransform.position = Vector3.MoveTowards(attackerTransform.position, combatPosition, walkSpeed * Time.deltaTime);
-            yield return null;
-        }
-
-        attackerTransform.position = combatPosition;
-
-        Transform baseArea = (attacker.ownerId == 0) ? p0BoardArea : p1BoardArea;
-        Vector3 localOffset = attackerTransform.position - baseArea.position;
-        attacker.logicalPosition = new Vector2(localOffset.x, localOffset.z);
-
-        ExecuteRangedVisuals(attackerObj, defenderObj, shootProjectile);
+        float delay = projectileIndex * 0.12f;
+        StartCoroutine(FireSOL9Projectile(casterObj, targetObj, target, delay, projectileIndex, onImpact));
     }
 
-    private IEnumerator AnimateMeleeWalkAndStrike(Unit attacker, Transform attackerTransform, Vector3 enemyPosition)
+    private IEnumerator FireSOL9Projectile(
+        GameObject casterObj, GameObject targetObj, Unit targetData,
+        float initialDelay, int projectileIndex, Action onImpact)
     {
-        Vector3 originalPosition = attackerTransform.position;
-        Vector3 combatPosition = enemyPosition + (originalPosition - enemyPosition).normalized * 1.2f;
-        combatPosition.y = originalPosition.y;
+        yield return new WaitForSeconds(initialDelay);
 
-        float walkSpeed = 8f;
+        if (casterObj == null || targetObj == null) yield break;
 
-        while (Vector3.Distance(attackerTransform.position, combatPosition) > 0.1f)
+        UnitWorldUI ui = casterObj.GetComponent<UnitWorldUI>();
+        Vector3 spawnPos = (ui != null && ui.shootPoint != null)
+                           ? ui.shootPoint.position
+                           : casterObj.transform.position + Vector3.up * 0.8f;
+
+        Vector3 targetPos = targetObj.transform.position + Vector3.up * 0.9f;
+        targetPos += new Vector3(
+            UnityEngine.Random.Range(-0.15f, 0.15f), 0,
+            UnityEngine.Random.Range(-0.15f, 0.15f));
+
+        GameObject bulletPrefab = prefabSollarBullet != null ? prefabSollarBullet : prefabVoidBullet;
+        if (bulletPrefab == null)
         {
-            attackerTransform.position = Vector3.MoveTowards(attackerTransform.position, combatPosition, walkSpeed * Time.deltaTime);
+            // Sin prefab aún: aplicamos el daño igualmente
+            onImpact?.Invoke();
+            yield break;
+        }
+
+        GameObject bullet = Instantiate(bulletPrefab, spawnPos, Quaternion.identity);
+        bullet.transform.LookAt(targetPos);
+
+        float travelTime = 0.10f;
+        float t = 0f;
+        while (t < travelTime && bullet != null)
+        {
+            t += Time.deltaTime;
+            bullet.transform.position = Vector3.Lerp(spawnPos, targetPos, t / travelTime);
             yield return null;
         }
 
-        Vector3 strikePos = combatPosition + (enemyPosition - combatPosition).normalized * 0.4f;
-        float bumpTime = 0.08f;
-        float timer = 0;
+        if (bullet != null) Destroy(bullet);
 
-        while (timer < bumpTime)
+        // ── IMPACTO: aplicar daño ahora que la bala llegó ─────────────────────
+        onImpact?.Invoke();
+
+        if (targetObj != null)
         {
-            timer += Time.deltaTime;
-            attackerTransform.position = Vector3.Lerp(combatPosition, strikePos, timer / bumpTime);
-            yield return null;
+            if (prefabForceImpact != null)
+                Instantiate(prefabForceImpact, targetObj.transform.position + Vector3.up * 0.9f, Quaternion.identity);
+
+            // Stagger FX en el segundo impacto (cuando projectileHitCount llega a 2)
+            if (projectileIndex == 1 && prefabStaggerFX != null && targetData.stunTimer > 0)
+                Instantiate(prefabStaggerFX, targetObj.transform.position + Vector3.up, Quaternion.identity);
         }
-
-        timer = 0;
-        while (timer < bumpTime)
-        {
-            timer += Time.deltaTime;
-            attackerTransform.position = Vector3.Lerp(strikePos, combatPosition, timer / bumpTime);
-            yield return null;
-        }
-
-        attackerTransform.position = combatPosition;
-
-        Transform baseArea = (attacker.ownerId == 0) ? p0BoardArea : p1BoardArea;
-        Vector3 localOffset = attackerTransform.position - baseArea.position;
-        attacker.logicalPosition = new Vector2(localOffset.x, localOffset.z);
     }
 
-    private IEnumerator AnimateProjectile(Vector3 startPos, Vector3 targetPos)
+    // ─── ANIMACIÓN RANGED: caminar hasta rango y disparar ────────────────────
+    private IEnumerator AnimateWalkToRangeAndShoot(
+        GameObject attObj, GameObject defObj, float range, Action onImpact)
     {
-        GameObject bullet = Instantiate(prefabVoidBullet, startPos, Quaternion.identity);
-        float duration = 0.15f;
-        float timer = 0;
+        if (attObj == null || defObj == null) yield break;
 
-        while (timer < duration)
+        Vector3 enemyPos = defObj.transform.position;
+        Vector3 combatPos = enemyPos + (attObj.transform.position - enemyPos).normalized * range;
+        combatPos.y = attObj.transform.position.y;
+
+        while (attObj != null && Vector3.Distance(attObj.transform.position, combatPos) > 0.1f)
         {
-            timer += Time.deltaTime;
-            bullet.transform.position = Vector3.Lerp(startPos, targetPos, timer / duration);
+            attObj.transform.position = Vector3.MoveTowards(
+                attObj.transform.position, combatPos, 8f * Time.deltaTime);
             yield return null;
         }
-        Destroy(bullet);
+
+        if (attObj == null || defObj == null) yield break;
+
+        yield return StartCoroutine(AnimateProjectileWithImpact(attObj, defObj, onImpact));
     }
 
+    // ─── PROYECTIL RANGED BÁSICO ──────────────────────────────────────────────
+    // El daño se aplica cuando el proyectil llega al destino.
+    private IEnumerator AnimateProjectileWithImpact(
+        GameObject attObj, GameObject defObj, Action onImpact)
+    {
+        if (attObj == null || defObj == null)
+        {
+            onImpact?.Invoke();
+            yield break;
+        }
+
+        UnitWorldUI ui = attObj.GetComponent<UnitWorldUI>();
+        Vector3 startPos = (ui != null && ui.shootPoint != null)
+                           ? ui.shootPoint.position
+                           : attObj.transform.position + Vector3.up * 0.8f;
+
+        Vector3 endPos = defObj.transform.position + Vector3.up;
+
+        GameObject bulletPrefab = prefabVoidBullet;
+        if (bulletPrefab == null)
+        {
+            onImpact?.Invoke();
+            yield break;
+        }
+
+        GameObject bullet = Instantiate(bulletPrefab, startPos, Quaternion.identity);
+        bullet.transform.LookAt(endPos);
+
+        float travelTime = 0.15f;
+        float t = 0f;
+        while (t < travelTime && bullet != null)
+        {
+            t += Time.deltaTime;
+            bullet.transform.position = Vector3.Lerp(startPos, endPos, t / travelTime);
+            yield return null;
+        }
+
+        if (bullet != null) Destroy(bullet);
+
+        // ── IMPACTO ───────────────────────────────────────────────────────────
+        onImpact?.Invoke();
+
+        if (defObj != null && prefabForceImpact != null)
+            Instantiate(prefabForceImpact, defObj.transform.position + Vector3.up, Quaternion.identity);
+    }
+
+    // ─── ANIMACIÓN MELEE: acercarse y golpear ─────────────────────────────────
+    // El daño se aplica en el fotograma del "strike" (extensión del brazo).
+    private IEnumerator AnimateMeleeWalkAndStrike(
+        GameObject attObj, GameObject defObj, Action onImpact)
+    {
+        if (attObj == null || defObj == null) yield break;
+
+        Vector3 enemyPos = defObj.transform.position;
+        Vector3 combatPos = enemyPos + (attObj.transform.position - enemyPos).normalized * 1.2f;
+        combatPos.y = attObj.transform.position.y;
+
+        // Caminar hacia el objetivo
+        while (attObj != null && Vector3.Distance(attObj.transform.position, combatPos) > 0.1f)
+        {
+            attObj.transform.position = Vector3.MoveTowards(
+                attObj.transform.position, combatPos, 8f * Time.deltaTime);
+            yield return null;
+        }
+
+        if (attObj == null || defObj == null) yield break;
+
+        // Extender el golpe hacia el objetivo
+        Vector3 strikePos = combatPos + (enemyPos - combatPos).normalized * 0.4f;
+        float t = 0f;
+        while (t < 0.08f && attObj != null)
+        {
+            t += Time.deltaTime;
+            attObj.transform.position = Vector3.Lerp(combatPos, strikePos, t / 0.08f);
+            yield return null;
+        }
+
+        // ── IMPACTO: el puño llegó al objetivo ────────────────────────────────
+        onImpact?.Invoke();
+
+        if (defObj != null && prefabForceImpact != null)
+            Instantiate(prefabForceImpact, defObj.transform.position + Vector3.up * 0.5f, Quaternion.identity);
+
+        // Retirar el brazo
+        if (attObj != null) attObj.transform.position = combatPos;
+    }
+
+    // ─── SKILL CAST (animaciones del caster) ──────────────────────────────────
+    private void HandleUnitSkillCast(Unit caster, CardID skillId)
+    {
+        if (!_visualUnits.TryGetValue(caster, out GameObject casterObj) || casterObj == null) return;
+
+        switch (skillId)
+        {
+            case CardID.SollarDuelist: StartCoroutine(AnimateSpin(casterObj.transform)); break;
+            case CardID.VoidHeavyShooter: StartCoroutine(AnimateShake(casterObj.transform)); break;
+            case CardID.SollarForce: StartCoroutine(AnimatePulse(casterObj.transform)); break;
+            default: StartCoroutine(AnimatePulse(casterObj.transform)); break;
+        }
+    }
+
+    // ─── ANIMACIONES DE SOPORTE ───────────────────────────────────────────────
     private IEnumerator AnimateSpin(Transform t)
     {
-        float duration = 0.4f;
-        float timer = 0;
         Vector3 startRot = t.eulerAngles;
-        while (timer < duration)
+        float timer = 0f;
+        while (timer < 0.4f && t != null)
         {
             timer += Time.deltaTime;
-            float yRot = Mathf.Lerp(0, 360, timer / duration);
-            t.eulerAngles = new Vector3(startRot.x, startRot.y + yRot, startRot.z);
+            t.eulerAngles = new Vector3(startRot.x,
+                startRot.y + Mathf.Lerp(0, 360, timer / 0.4f), startRot.z);
             yield return null;
         }
-        t.eulerAngles = startRot;
     }
 
     private IEnumerator AnimatePulse(Transform t)
     {
-        Vector3 origScale = t.localScale;
-        Vector3 bigScale = origScale * 1.5f;
-        float halfDuration = 0.2f;
-
-        float timer = 0;
-        while (timer < halfDuration)
+        Vector3 orig = t.localScale;
+        float timer = 0f;
+        while (timer < 0.2f && t != null)
         {
             timer += Time.deltaTime;
-            t.localScale = Vector3.Lerp(origScale, bigScale, timer / halfDuration);
+            t.localScale = Vector3.Lerp(orig, orig * 1.5f, timer / 0.2f);
             yield return null;
         }
-        timer = 0;
-        while (timer < halfDuration)
+        timer = 0f;
+        while (timer < 0.2f && t != null)
         {
             timer += Time.deltaTime;
-            t.localScale = Vector3.Lerp(bigScale, origScale, timer / halfDuration);
+            t.localScale = Vector3.Lerp(orig * 1.5f, orig, timer / 0.2f);
             yield return null;
         }
-        t.localScale = origScale;
     }
 
     private IEnumerator AnimateShake(Transform t)
     {
-        Vector3 origPos = t.position;
-        float duration = 0.5f;
-        float timer = 0;
-        while (timer < duration)
+        Vector3 orig = t.position;
+        float timer = 0f;
+        while (timer < 0.5f && t != null)
         {
             timer += Time.deltaTime;
-            float offsetX = Random.Range(-0.2f, 0.2f);
-            float offsetZ = Random.Range(-0.2f, 0.2f);
-            t.position = origPos + new Vector3(offsetX, 0, offsetZ);
+            t.position = orig + new Vector3(
+                UnityEngine.Random.Range(-0.2f, 0.2f), 0,
+                UnityEngine.Random.Range(-0.2f, 0.2f));
             yield return null;
         }
-        t.position = origPos;
+        if (t != null) t.position = orig;
     }
 }
