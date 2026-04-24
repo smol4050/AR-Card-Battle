@@ -7,31 +7,34 @@ using System.Linq;
 public class AISlotDecision
 {
     public CardID cardId;
-    public int slotIndex; // De 0 a 5
+    public int slotIndex;
 }
 
 [System.Serializable]
-public class AIBoardState
+public class AIBattleRecord
 {
-    public List<AISlotDecision> decisions; // Lista de (Qué, Dónde)
+    public List<CardID> enemyArmy; // El Draft del rival
+    public List<AISlotDecision> aiDecisions; // La respuesta de la IA
     public float winWeight;
 
-    public AIBoardState(List<AISlotDecision> decisions, float initialWeight)
+    public AIBattleRecord(List<CardID> enemy, List<AISlotDecision> decisions, float weight)
     {
-        this.decisions = new List<AISlotDecision>(decisions);
-        this.winWeight = initialWeight;
+        enemyArmy = new List<CardID>(enemy);
+        enemyArmy.Sort(); // Ordenamos para comparar fácilmente
+        aiDecisions = new List<AISlotDecision>(decisions);
+        winWeight = weight;
     }
 }
 
 [System.Serializable]
 public class AIDatabase
 {
-    public List<AIBoardState> historicalStates = new List<AIBoardState>();
+    public List<AIBattleRecord> historicalRecords = new List<AIBattleRecord>();
 }
 
 public static class AIDataBank
 {
-    private static string _savePath = Application.persistentDataPath + "/AIBrain_v2.json";
+    private static string _savePath = Application.persistentDataPath + "/AIBrain_Superior.json";
     private static AIDatabase _currentDB = new AIDatabase();
 
     public static void LoadBrain()
@@ -43,22 +46,62 @@ public static class AIDataBank
         }
     }
 
-    public static List<AISlotDecision> GetBestHistoricalArmy()
+    // El motor de búsqueda que encuentra el counter perfecto
+    public static List<AISlotDecision> GetBestCounterStrategy(List<CardID> currentEnemyBoard)
     {
-        if (_currentDB.historicalStates.Count == 0) return null;
-        var best = _currentDB.historicalStates.OrderByDescending(s => s.winWeight).FirstOrDefault();
-        return (best != null && best.winWeight > 0) ? best.decisions : null;
+        if (_currentDB.historicalRecords.Count == 0) return null;
+
+        var sortedEnemy = new List<CardID>(currentEnemyBoard);
+        sortedEnemy.Sort();
+
+        // 1. Buscar una coincidencia exacta del tablero enemigo con winrate positivo
+        var exactMatches = _currentDB.historicalRecords
+            .Where(r => r.enemyArmy.SequenceEqual(sortedEnemy) && r.winWeight > 0)
+            .OrderByDescending(r => r.winWeight)
+            .ToList();
+
+        if (exactMatches.Count > 0)
+        {
+            Debug.Log("AI Brain: ¡Match exacto encontrado! Ejecutando counter-pick.");
+            return exactMatches.First().aiDecisions;
+        }
+
+        // 2. Si no hay coincidencia exacta, buscar la estrategia con mayor winrate general
+        // (Esto simula que la IA confía en su "Composición Meta" cuando no conoce el matchup)
+        var metaStrategy = _currentDB.historicalRecords
+            .Where(r => r.winWeight > 0)
+            .OrderByDescending(r => r.winWeight)
+            .FirstOrDefault();
+
+        if (metaStrategy != null)
+        {
+            Debug.Log("AI Brain: Matchup desconocido. Ejecutando la mejor composición general (Meta).");
+            return metaStrategy.aiDecisions;
+        }
+
+        return null; // La IA no tiene idea de qué hacer, tendrá que improvisar (Random)
     }
 
-    public static void RecordBattleResult(List<AISlotDecision> battleDecisions, bool didAIWin)
+    public static void RecordBattleResult(List<CardID> enemyArmy, List<AISlotDecision> battleDecisions, bool didAIWin)
     {
         float weightDelta = didAIWin ? 1.0f : -0.5f;
+        var sortedEnemy = new List<CardID>(enemyArmy);
+        sortedEnemy.Sort();
 
-        // Buscamos si esta configuración exacta de posiciones ya existe
-        var existing = _currentDB.historicalStates.Find(s => IsSameStrategy(s.decisions, battleDecisions));
+        // Buscamos si ya existe este cruce específico de (Rival VS IA)
+        var existingRecord = _currentDB.historicalRecords.Find(r =>
+            r.enemyArmy.SequenceEqual(sortedEnemy) &&
+            IsSameStrategy(r.aiDecisions, battleDecisions)
+        );
 
-        if (existing != null) existing.winWeight += weightDelta;
-        else _currentDB.historicalStates.Add(new AIBoardState(battleDecisions, weightDelta));
+        if (existingRecord != null)
+        {
+            existingRecord.winWeight += weightDelta;
+        }
+        else
+        {
+            _currentDB.historicalRecords.Add(new AIBattleRecord(sortedEnemy, battleDecisions, weightDelta));
+        }
 
         File.WriteAllText(_savePath, JsonUtility.ToJson(_currentDB, true));
     }
@@ -66,7 +109,6 @@ public static class AIDataBank
     private static bool IsSameStrategy(List<AISlotDecision> a, List<AISlotDecision> b)
     {
         if (a.Count != b.Count) return false;
-        // Compara si todos los pares (Carta, Slot) coinciden
         return a.All(da => b.Any(db => db.cardId == da.cardId && db.slotIndex == da.slotIndex));
     }
 }

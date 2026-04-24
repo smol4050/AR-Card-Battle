@@ -2648,6 +2648,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: MainScripts::PlayerInputController
   gameManager: {fileID: 1465123499}
+  targetSlot: {fileID: 419718960}
+  targetRow: 0
+  targetSlotIndex: 1
 --- !u!114 &1465123496
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2690,8 +2693,25 @@ MonoBehaviour:
   prefabVoidCommander: {fileID: 5958500295921118325, guid: e09945c28a64dd4418066d26d138b8ed, type: 3}
   prefabVoidHeavyShooter: {fileID: 5958500295921118325, guid: 2d63dab9db22458448421a0a7faa7f06, type: 3}
   prefabVoidBullet: {fileID: 6888773692608800421, guid: 2ff449dc4c96e2e47b3543496ef6e8c6, type: 3}
+  prefabForceImpact: {fileID: 0}
   p0BoardArea: {fileID: 281000242}
   p1BoardArea: {fileID: 255053809}
+  p0FrontSlots:
+  - {fileID: 1449979331}
+  - {fileID: 419718960}
+  - {fileID: 988811708}
+  p0BackSlots:
+  - {fileID: 1823163430}
+  - {fileID: 1661610173}
+  - {fileID: 311225025}
+  p1FrontSlots:
+  - {fileID: 920936585}
+  - {fileID: 1747628883}
+  - {fileID: 1687249020}
+  p1BackSlots:
+  - {fileID: 1525153820}
+  - {fileID: 1494831465}
+  - {fileID: 1578524378}
 --- !u!114 &1465123498
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2756,6 +2776,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::TutorialAIController
   gameManager: {fileID: 1465123499}
   currentDifficulty: 2
+  availableCards: 050000000400000006000000
   frontSlots:
   - {fileID: 920936585}
   - {fileID: 1747628883}

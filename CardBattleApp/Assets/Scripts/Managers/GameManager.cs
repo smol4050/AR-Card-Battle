@@ -17,6 +17,7 @@ public class GameManager : MonoBehaviour
     public event Action<RoundPhase> OnPhaseChanged;
     public event Action<int, bool> OnPlayerReadyStatusChanged;
     public event Action<int, string> OnLogMessage;
+    public event Action<Unit, Unit, string> OnVisualEffectRequested; // NUEVO EVENTO VFX
 
     public void InitializeGame()
     {
@@ -62,11 +63,11 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    public bool PlayCard(int playerId, CardID cardId, Vector2 spawnPos, int row, int slotIndex, int cost = 1)
+    public bool PlayCard(int playerId, CardID cardId, Vector2 dummyPos, int row, int slotIndex, int cost = 1)
     {
         if (currentPhase != RoundPhase.Preparation) return false;
 
-        // NUEVO: Validación de Casilla Única. Rechaza la compra si ya hay una unidad viva allí.
+        // Validación de Casilla Única
         if (activeUnits[playerId].Exists(u => u.slotIndex == slotIndex && !u.IsDead))
         {
             LogMessage(playerId, $"Slot {slotIndex} is already occupied!");
@@ -79,33 +80,35 @@ public class GameManager : MonoBehaviour
 
         for (int i = 0; i < spawnCount; i++)
         {
-            Vector2 finalPos = spawnPos + new Vector2(i * 0.3f, 0);
+            Vector2 initialLogicalPos = Vector2.zero; // El visual controller aplicará la real
             Unit newUnit = null;
 
             switch (cardId)
             {
+                // --- SOLLAR ALLIANCE ---
                 case CardID.SollarDuelist:
-                    newUnit = new Unit(playerId, cardId, row, slotIndex, 180f, 38f, 40f, 0.95f, finalPos);
-                    newUnit.skillCooldown = 6f;
+                    newUnit = new Unit(playerId, cardId, row, slotIndex, 180f, 38f, 40f, 0.95f, initialLogicalPos);
+                    newUnit.skillCooldown = 4.5f; // BUFF
                     break;
                 case CardID.SollarForce:
-                    newUnit = new Unit(playerId, cardId, row, slotIndex, 140f, 20f, 35f, 0.85f, finalPos);
+                    newUnit = new Unit(playerId, cardId, row, slotIndex, 170f, 20f, 35f, 0.85f, initialLogicalPos); // BUFF
                     newUnit.skillCooldown = 5f;
                     break;
                 case CardID.SollarCommander:
-                    newUnit = new Unit(playerId, cardId, row, slotIndex, 160f, 28f, 35f, 0.85f, finalPos);
+                    newUnit = new Unit(playerId, cardId, row, slotIndex, 160f, 28f, 35f, 0.85f, initialLogicalPos);
                     newUnit.skillCooldown = 8f;
                     break;
+
+                // --- VOID DOMINION ---
                 case CardID.VoidHorde:
-                    // La Horda inyectará el MISMO slotIndex a sus 4 individuos, reclamando la casilla para el escuadrón completo
-                    newUnit = new Unit(playerId, cardId, row, slotIndex, 50f, 15f, 10f, 1.25f, finalPos);
+                    newUnit = new Unit(playerId, cardId, row, slotIndex, 75f, 22f, 10f, 1.25f, initialLogicalPos);
                     break;
                 case CardID.VoidCommander:
-                    newUnit = new Unit(playerId, cardId, row, slotIndex, 180f, 30f, 30f, 0.9f, finalPos);
+                    newUnit = new Unit(playerId, cardId, row, slotIndex, 180f, 30f, 30f, 0.9f, initialLogicalPos);
                     newUnit.skillCooldown = 7f;
                     break;
                 case CardID.VoidHeavyShooter:
-                    newUnit = new Unit(playerId, cardId, row, slotIndex, 120f, 60f, 20f, 1.0f, finalPos);
+                    newUnit = new Unit(playerId, cardId, row, slotIndex, 120f, 60f, 20f, 1.0f, initialLogicalPos);
                     newUnit.skillCooldown = 6f;
                     break;
             }
@@ -133,7 +136,6 @@ public class GameManager : MonoBehaviour
 
     private void UpdateAurasAndPassives()
     {
-        // 1. Limpieza base
         foreach (var list in activeUnits)
         {
             foreach (var u in list)
@@ -143,7 +145,7 @@ public class GameManager : MonoBehaviour
             }
         }
 
-        // 2. Fuego Coordinado (Void Horde Multiplier)
+        // VOID AURA
         int hordeCount = activeUnits[1].FindAll(u => u.cardId == CardID.VoidHorde).Count;
         float hordeMultiplier = 1f;
         if (hordeCount == 2) hordeMultiplier = 1.20f;
@@ -152,14 +154,20 @@ public class GameManager : MonoBehaviour
 
         foreach (Unit u in activeUnits[1])
         {
-            if (u.cardId == CardID.VoidHorde)
+            if (u.cardId == CardID.VoidHorde) u.damageMultiplier *= hordeMultiplier;
+            if (u.cardId == CardID.VoidCommander) u.bonusSpeed += (activeUnits[1].Count * 0.08f);
+        }
+
+        // SOLLAR AURA (Commander Buff)
+        Unit sollarCmdr = activeUnits[0].Find(u => u.cardId == CardID.SollarCommander);
+        if (sollarCmdr != null && !sollarCmdr.IsDead)
+        {
+            foreach (Unit ally in activeUnits[0])
             {
-                u.damageMultiplier *= hordeMultiplier;
-            }
-            if (u.cardId == CardID.VoidCommander)
-            {
-                // BUFF: Ahora otorga 8% (0.08f) por unidad en lugar de 5% (0.05f)
-                u.bonusSpeed += (activeUnits[1].Count * 0.08f);
+                if (Vector2.Distance(sollarCmdr.logicalPosition, ally.logicalPosition) <= 3f)
+                {
+                    ally.bonusSpeed += 0.20f; // BUFF
+                }
             }
         }
     }
@@ -180,7 +188,11 @@ public class GameManager : MonoBehaviour
                 if (attacker.passiveTimer >= 4f)
                 {
                     Unit closest = GetClosestTarget(attacker, defenderTeamId);
-                    if (closest != null) closest.stunTimer = 0.5f;
+                    if (closest != null)
+                    {
+                        closest.stunTimer = 1.2f; // BUFF
+                        OnVisualEffectRequested?.Invoke(attacker, closest, "ForceHit"); // SOLICITA PARTICULAS
+                    }
                     attacker.passiveTimer = 0f;
                 }
             }
@@ -188,11 +200,6 @@ public class GameManager : MonoBehaviour
             if (attacker.skillCooldown > 0)
             {
                 attacker.currentSkillTimer += deltaTime;
-                if (attacker.ownerId == 0 && activeUnits[0].Exists(u => u.cardId == CardID.SollarCommander))
-                {
-                    attacker.currentSkillTimer += (deltaTime * 0.10f);
-                }
-
                 if (attacker.currentSkillTimer >= attacker.skillCooldown)
                 {
                     ExecuteSkill(attacker, defenderTeamId);
@@ -241,7 +248,7 @@ public class GameManager : MonoBehaviour
                 if (targetForce != null)
                 {
                     targetForce.TakeDamage(30f);
-                    targetForce.stunTimer = 0.5f;
+                    targetForce.stunTimer = 1.2f;
                     targetForce.logicalPosition = new Vector2(targetForce.logicalPosition.x + 1.5f, targetForce.logicalPosition.y);
                 }
                 break;
@@ -267,18 +274,12 @@ public class GameManager : MonoBehaviour
         Unit bestTarget = null;
         float closestDist = float.MaxValue;
 
-        // 1. Verificar si la Primera Línea (row 0) del enemigo sigue viva
         bool isFrontlineAlive = activeUnits[enemyTeamId].Exists(u => !u.IsDead && u.row == 0);
-
-        // 2. Establecer la línea objetivo: Si hay frente, se ataca el frente. Si no, se avanza a la retaguardia.
         int targetRow = isFrontlineAlive ? 0 : 1;
 
-        // 3. Buscar al enemigo más cercano DENTRO de la línea objetivo
         foreach (Unit enemy in activeUnits[enemyTeamId])
         {
             if (enemy.IsDead) continue;
-
-            // FILTRO DE FOCUS: Ignoramos al enemigo si no pertenece a la línea que debemos atacar
             if (enemy.row != targetRow) continue;
 
             float dist = Vector2.Distance(attacker.logicalPosition, enemy.logicalPosition);
