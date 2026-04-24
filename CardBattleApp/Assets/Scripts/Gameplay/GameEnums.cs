@@ -1,4 +1,4 @@
-public enum RoundPhase
+﻿public enum RoundPhase
 {
     Preparation,
     Combat,
@@ -8,6 +8,15 @@ public enum RoundPhase
 public enum CardID
 {
     None,
-    SollarDuelist, SollarForce, SollarCommander,
-    VoidHorde, VoidCommander, VoidHeavyShooter
+    // ── Sollar Alliance ───────────────────────────────────────────────────────
+    SollarDuelist,
+    SollarForce,
+    SollarCommander,
+    SolarVanguard,
+
+    // ── Void Dominion ─────────────────────────────────────────────────────────
+    VoidHorde,
+    VoidCommander,
+    VoidHeavyShooter,
+    AbyssReaper,
 }

@@ -1,11 +1,21 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.AI;
 
 public class GameManager : MonoBehaviour
 {
     public PlayerManager[] players = new PlayerManager[2];
     public List<Unit>[] activeUnits = new List<Unit>[2];
+
+    // Temporizador de combate
+    public float combatTimer { get; private set; }
+    public bool isSuddenDeathActive { get; private set; }
+    public float suddenDeathMultiplier = 1f;
+
+    // Naves activas (máximo 1 por bando por ronda)
+    private ShipInstance[] _activeShips = new ShipInstance[2];
+    private bool[] _shipUsedThisRound = new bool[2];
 
     public RoundPhase currentPhase { get; private set; }
     public bool[] isPlayerReady = new bool[2];
@@ -16,18 +26,25 @@ public class GameManager : MonoBehaviour
     public event Action<RoundPhase> OnPhaseChanged;
     public event Action<int, bool> OnPlayerReadyStatusChanged;
     public event Action<int, string> OnLogMessage;
-    public event Action<Unit, Unit, string> OnVisualEffectRequested;
 
-    // El VisualController escucha este evento para iniciar la animación.
-    // El daño NO se aplica aquí — se aplica cuando el Visual llama ApplyAttackDamage.
-    // Payload: (attacker, target, damageCallback)
+    // Animación de ataque: el daño se aplica cuando la bala/golpe impacta.
+    // Payload: (attacker, target, onImpactCallback)
     public event Action<Unit, Unit, Action> OnAttackAnimationRequested;
 
-    // SOL-9: igual que OnAttackAnimationRequested pero para cada proyectil de la ráfaga.
-    // Payload: (caster, target, projectileIndex, damageCallback)
+    // SOL-9 Disruption Barrage: un evento por proyectil.
+    // Payload: (caster, target, projectileIndex, onImpactCallback)
     public event Action<Unit, Unit, int, Action> OnSOL9ProjectileRequested;
 
     public event Action<Unit, CardID> OnUnitSkillCast;
+
+    // Nave spawneada/expirada
+    // Payload: (ownerId, ship)
+    public event Action<int, ShipInstance> OnShipSpawned;
+    public event Action<int, ShipInstance> OnShipExpired;
+
+    // Pulso de nave disparado (para animación)
+    // Payload: (ownerId, ship, pulseIndex, targetsHit)
+    public event Action<int, ShipInstance, int, List<Unit>> OnShipPulseFired;
 
     // ─── INICIALIZACIÓN ───────────────────────────────────────────────────────
     public void InitializeGame()
@@ -44,6 +61,11 @@ public class GameManager : MonoBehaviour
         currentPhase = RoundPhase.Preparation;
         isPlayerReady[0] = false;
         isPlayerReady[1] = false;
+        _activeShips[0] = null;
+        _activeShips[1] = null;
+        _shipUsedThisRound[0] = false;
+        _shipUsedThisRound[1] = false;
+
         players[0].StartTurn();
         players[1].StartTurn();
         OnPhaseChanged?.Invoke(currentPhase);
@@ -67,13 +89,26 @@ public class GameManager : MonoBehaviour
         {
             currentPhase = RoundPhase.Combat;
             OnPhaseChanged?.Invoke(currentPhase);
-            LogMessage(-1, "<color=red>¡GUERRA DECLARADA! Conteo de unidades activo.</color>");
+            LogMessage(-1, "<color=red>¡GUERRA DECLARADA!</color>");
         }
     }
 
     // ─── JUGAR CARTA ──────────────────────────────────────────────────────────
-    public bool PlayCard(int playerId, CardID cardId, Vector2 dummyPos, int row, int slotIndex, int cost = 1)
+    public bool PlayCard(int playerId, CardID cardId, Vector2 logicalPos, int row, int slotIndex, int cost = 1)
     {
+        if (!GameplayRules.CanPlayCard(currentPhase, players[playerId].energy, cost)) return false;
+
+        bool isShip = cardId == CardID.SolarVanguard || cardId == CardID.AbyssReaper;
+        if (isShip)
+        {
+            if (currentPhase != RoundPhase.Combat) return false;
+            if (_shipUsedThisRound[playerId]) return false;
+            if (!players[playerId].ConsumeEnergy(cost)) return false;
+
+            SpawnShip(playerId, cardId, logicalPos);
+            return true;
+        }
+
         if (currentPhase != RoundPhase.Preparation) return false;
 
         bool isCommanderCard = cardId == CardID.SollarCommander || cardId == CardID.VoidCommander;
@@ -81,72 +116,104 @@ public class GameManager : MonoBehaviour
             u => (u.cardId == CardID.SollarCommander || u.cardId == CardID.VoidCommander) && !u.IsDead))
             return false;
 
-        if (!players[playerId].ConsumeEnergy(cost)) return false;
-
-        // ── VoidHorde: 1 costo → 4 unidades en slots libres ─────────────────
+        // VoidHorde: 1 costo -> 4 unidades en EL MISMO SLOT
         if (cardId == CardID.VoidHorde)
         {
-            List<int> freeSlots = new List<int>();
-            for (int s = 0; s < 6 && freeSlots.Count < 4; s++)
-                if (!activeUnits[playerId].Exists(u => u.slotIndex == s && !u.IsDead))
-                    freeSlots.Add(s);
+            if (activeUnits[playerId].Exists(u => u.slotIndex == slotIndex && !u.IsDead)) return false; // El slot debe estar libre
+            if (!players[playerId].ConsumeEnergy(cost)) return false;
 
-            foreach (int assignedSlot in freeSlots)
+            for (int i = 0; i < 4; i++)
             {
-                int assignedRow = (assignedSlot < 3) ? 0 : 1;
-                Unit hordeUnit = new Unit(playerId, cardId, assignedRow, assignedSlot,
-                                          70f, 20f, 10f, 1.30f, Vector2.zero,
-                                          lifesteal: 0.15f);
+                // Offset visual para que no colisionen exactamente en el mismo pixel
+                Vector2 offset = new Vector2(UnityEngine.Random.Range(-0.4f, 0.4f), UnityEngine.Random.Range(-0.4f, 0.4f));
+                Unit hordeUnit = new Unit(playerId, cardId, row, slotIndex,
+                                           70f, 20f, 10f, 1.30f, logicalPos + offset, lifesteal: 0.15f);
                 activeUnits[playerId].Add(hordeUnit);
                 OnUnitSpawned?.Invoke(playerId, hordeUnit);
             }
             return true;
         }
 
-        // ── Cartas normales: 1 costo → 1 unidad ──────────────────────────────
         if (activeUnits[playerId].Exists(u => u.slotIndex == slotIndex && !u.IsDead)) return false;
+        if (!players[playerId].ConsumeEnergy(cost)) return false;
 
-        Unit newUnit = null;
+        Unit newUnit = CreateUnit(playerId, cardId, row, slotIndex);
+        if (newUnit == null) return false;
+
+        activeUnits[playerId].Add(newUnit);
+        OnUnitSpawned?.Invoke(playerId, newUnit);
+        return true;
+    }
+
+    // ─── FACTORY DE UNIDADES ──────────────────────────────────────────────────
+    private Unit CreateUnit(int playerId, CardID cardId, int row, int slotIndex)
+    {
+        Unit u = null;
         switch (cardId)
         {
             case CardID.SollarDuelist:
-                newUnit = new Unit(playerId, cardId, row, slotIndex,
-                                   260f, 38f, 55f, 0.95f, Vector2.zero,
-                                   lifesteal: 0.10f, regen: 0.01f);
-                newUnit.skillCooldown = 5f;
+                u = new Unit(playerId, cardId, row, slotIndex, 260f, 38f, 55f, 0.95f, Vector2.zero,
+                             lifesteal: 0.10f, regen: 0.01f);
+                u.skillCooldown = 5f;
                 break;
             case CardID.SollarCommander:
-                newUnit = new Unit(playerId, cardId, row, slotIndex,
-                                   320f, 25f, 70f, 0.80f, Vector2.zero,
-                                   regen: 0.02f, healPower: 0.25f);
-                newUnit.skillCooldown = 8f;
+                u = new Unit(playerId, cardId, row, slotIndex, 320f, 25f, 70f, 0.80f, Vector2.zero,
+                             regen: 0.02f, healPower: 0.25f);
+                u.skillCooldown = 8f;
                 break;
-            case CardID.SollarForce:
-                newUnit = new Unit(playerId, cardId, row, slotIndex,
-                                   125f, 48f, 25f, 1.10f, Vector2.zero);
-                newUnit.skillCooldown = 5f;
+            case CardID.SollarForce:           // SOL-9 "Aegis Unit" — cost:2
+                u = new Unit(playerId, cardId, row, slotIndex, 125f, 48f, 25f, 1.10f, Vector2.zero);
+                u.skillCooldown = 5f;
                 break;
             case CardID.VoidCommander:
-                newUnit = new Unit(playerId, cardId, row, slotIndex,
-                                   190f, 28f, 35f, 0.95f, Vector2.zero,
-                                   lifesteal: 0.08f);
-                newUnit.skillCooldown = 7f;
+                u = new Unit(playerId, cardId, row, slotIndex, 190f, 28f, 35f, 0.95f, Vector2.zero,
+                             lifesteal: 0.08f);
+                u.skillCooldown = 7f;
                 break;
             case CardID.VoidHeavyShooter:
-                newUnit = new Unit(playerId, cardId, row, slotIndex,
-                                   115f, 65f, 18f, 1.05f, Vector2.zero,
-                                   lifesteal: 0.12f);
-                newUnit.skillCooldown = 6f;
+                u = new Unit(playerId, cardId, row, slotIndex, 115f, 65f, 18f, 1.05f, Vector2.zero,
+                             lifesteal: 0.12f);
+                u.skillCooldown = 6f;
                 break;
         }
+        return u;
+    }
 
-        if (newUnit != null)
+    // ─── SPAWN DE NAVE ────────────────────────────────────────────────────────
+    private void SpawnShip(int playerId, CardID cardId, Vector2 logicalPos)
+    {
+        ShipInstance ship;
+
+        if (cardId == CardID.SolarVanguard)
         {
-            activeUnits[playerId].Add(newUnit);
-            OnUnitSpawned?.Invoke(playerId, newUnit);
-            return true;
+            // 3 ráfagas cada 1.5 s, buffs aliados +20% ATK +10 Speed
+            ship = new ShipInstance(
+                id: cardId,
+                owner: playerId,
+                dur: 5f,
+                pulses: 3,
+                interval: 1.5f,
+                center: logicalPos,
+                atkBuff: 0.20f,
+                speedBuff: 0.10f);
         }
-        return false;
+        else // AbyssReaper
+        {
+            // 5 pulsos cada 1 s, sin buffs aliados propios (los debuffs van en el tick)
+            ship = new ShipInstance(
+                id: cardId,
+                owner: playerId,
+                dur: 5f,
+                pulses: 5,
+                interval: 1.0f,
+                center: logicalPos);
+        }
+
+        _activeShips[playerId] = ship;
+        _shipUsedThisRound[playerId] = true;
+
+        LogMessage(playerId, $"<color=yellow>[SHIP] {cardId} desplegada por {0.5f}s de cast time.</color>");
+        OnShipSpawned?.Invoke(playerId, ship);
     }
 
     // ─── TICK DE COMBATE ──────────────────────────────────────────────────────
@@ -154,16 +221,126 @@ public class GameManager : MonoBehaviour
     {
         if (currentPhase != RoundPhase.Combat) return;
 
+        UpdateShips(deltaTime);
         UpdateAurasAndPassives();
         ProcessTeamTicks(0, 1, deltaTime);
         ProcessTeamTicks(1, 0, deltaTime);
 
         CleanUpDeadUnits(0);
         CleanUpDeadUnits(1);
-
         CheckWinCondition();
     }
 
+    // ─── NAVES — UPDATE ───────────────────────────────────────────────────────
+    private void UpdateShips(float deltaTime)
+    {
+        for (int i = 0; i < 2; i++)
+        {
+            ShipInstance ship = _activeShips[i];
+            if (ship == null) continue;
+
+            ship.elapsed += deltaTime;
+            ship.pulseTimer += deltaTime;
+
+            // Aplicar buffs de nave Sollar a aliados en cada tick
+            if (ship.cardId == CardID.SolarVanguard)
+                ApplySolarVanguardAura(ship);
+
+            // Pulso
+            if (ship.pulseTimer >= ship.pulseInterval && ship.pulsesFired < ship.totalPulses)
+            {
+                ship.pulseTimer -= ship.pulseInterval;
+                FireShipPulse(ship, i);
+            }
+
+            if (ship.IsExpired)
+            {
+                // Limpiar buffs de nave al expirar
+                if (ship.cardId == CardID.SolarVanguard)
+                    ClearSolarVanguardAura(i);
+
+                OnShipExpired?.Invoke(i, ship);
+                LogMessage(i, $"<color=gray>[SHIP] {ship.cardId} ha expirado.</color>");
+                _activeShips[i] = null;
+            }
+        }
+    }
+
+    // Buff de aura: se recalcula cada tick (no se acumula)
+    private void ApplySolarVanguardAura(ShipInstance ship)
+    {
+        foreach (Unit ally in activeUnits[ship.ownerId])
+        {
+            if (ally.IsDead) continue;
+            ally.shipAtkBonus = ally.baseAtk * ship.atkBuffPercent;
+            ally.shipSpeedBonus = ship.speedBuff;
+        }
+    }
+
+    private void ClearSolarVanguardAura(int ownerId)
+    {
+        foreach (Unit ally in activeUnits[ownerId])
+        {
+            ally.shipAtkBonus = 0f;
+            ally.shipSpeedBonus = 0f;
+        }
+    }
+
+    private void FireShipPulse(ShipInstance ship, int ownerIdx)
+    {
+        int enemyIdx = 1 - ownerIdx;
+        int pulseIndex = ship.pulsesFired;
+        ship.pulsesFired++;
+
+        List<Unit> targetsHit = new List<Unit>();
+
+        if (ship.cardId == CardID.SolarVanguard)
+        {
+            // Ráfaga de área: golpea todos los enemigos en el campo
+            // (el diseño dice "prioriza zona con más enemigos" — con todas las unidades en 6 slots
+            //  el área siempre cubre el tablero completo; se puede refinar con radio si se añade posición)
+            foreach (Unit enemy in activeUnits[enemyIdx])
+            {
+                if (enemy.IsDead) continue;
+                float dmg = 25f * (100f / (100f + enemy.FinalDef));
+                enemy.TakeDamage(dmg);
+
+                // Burn: 5 dps durante 3s (no stackea, solo refresca)
+                enemy.burnTimer = 3f;
+                enemy.burnDps = 5f;
+
+                targetsHit.Add(enemy);
+            }
+            LogMessage(ownerIdx,
+                $"<color=orange>[Solar Vanguard] Ráfaga {pulseIndex + 1}/3 — {targetsHit.Count} impactos</color>");
+        }
+        else // AbyssReaper
+        {
+            // Pulso de área: 10 daño + debuffs a todos los enemigos en el tablero
+            foreach (Unit enemy in activeUnits[enemyIdx])
+            {
+                if (enemy.IsDead) continue;
+                float dmg = 10f * (100f / (100f + enemy.FinalDef));
+                enemy.TakeDamage(dmg);
+
+                // Debuffs (no stackean, se refrescan)
+                enemy.voidAntiHealTimer = ship.pulseInterval + 0.1f; // dura hasta el siguiente pulso
+                enemy.voidDefDebuffTimer = ship.pulseInterval + 0.1f;
+                enemy.voidSlowTimer = ship.pulseInterval + 0.1f;
+
+                targetsHit.Add(enemy);
+            }
+            LogMessage(ownerIdx,
+                $"<color=purple>[Abyss Reaper] Pulso {pulseIndex + 1}/5 — {targetsHit.Count} afectados</color>");
+        }
+
+        OnShipPulseFired?.Invoke(ownerIdx, ship, pulseIndex, targetsHit);
+
+        CleanUpDeadUnits(0);
+        CleanUpDeadUnits(1);
+    }
+
+    // ─── AURAS Y PASIVOS ──────────────────────────────────────────────────────
     private void UpdateAurasAndPassives()
     {
         foreach (var list in activeUnits)
@@ -176,8 +353,11 @@ public class GameManager : MonoBehaviour
                     u.damageMultiplier *= 1.20f;
                     u.bonusSpeed += 0.15f;
                 }
+                // Ship buffs se recalculan en UpdateShips; aquí solo reseteamos
+                // si la nave expiró (ClearSolarVanguardAura ya lo hace).
             }
 
+        // Swarm Rage (Void Horde)
         int hordeCount = activeUnits[1].FindAll(u => u.cardId == CardID.VoidHorde && !u.IsDead).Count;
         float hordeMultiplier = 1f;
         if (hordeCount == 2) hordeMultiplier = 1.20f;
@@ -188,23 +368,16 @@ public class GameManager : MonoBehaviour
             if (u.cardId == CardID.VoidHorde) u.damageMultiplier *= hordeMultiplier;
     }
 
+    // ─── TICK POR EQUIPO ──────────────────────────────────────────────────────
     private void ProcessTeamTicks(int attackerTeamId, int defenderTeamId, float deltaTime)
     {
         foreach (Unit attacker in activeUnits[attackerTeamId])
         {
             if (attacker.IsDead) continue;
 
-            if (attacker.antiHealTimer > 0) attacker.antiHealTimer -= deltaTime;
-            if (attacker.vulnerabilityTimer > 0) attacker.vulnerabilityTimer -= deltaTime;
-            if (attacker.commanderBuffTimer > 0) attacker.commanderBuffTimer -= deltaTime;
-            if (attacker.duelistRegenBuffTimer > 0) attacker.duelistRegenBuffTimer -= deltaTime;
-            if (attacker.slowTimer > 0) attacker.slowTimer -= deltaTime;
-
-            float regenRate = attacker.baseRegen;
-            if (attacker.commanderBuffTimer > 0) regenRate += 0.04f;
-            if (attacker.duelistRegenBuffTimer > 0) regenRate += 0.02f;
-            if (regenRate > 0 && attacker.currentHp < attacker.maxHp)
-                attacker.Heal(attacker.maxHp * regenRate * deltaTime);
+            TickTimers(attacker, deltaTime);
+            TickRegen(attacker, deltaTime);
+            TickBurn(attacker, deltaTime);
 
             if (attacker.stunTimer > 0)
             {
@@ -212,62 +385,88 @@ public class GameManager : MonoBehaviour
                 continue;
             }
 
-            if (attacker.skillCooldown > 0)
-            {
-                attacker.currentSkillTimer += deltaTime;
-                if (attacker.currentSkillTimer >= attacker.skillCooldown)
-                {
-                    ExecuteSkill(attacker, defenderTeamId);
-                    attacker.currentSkillTimer = 0f;
-                }
-            }
-
-            attacker.attackProgress += attacker.FinalSpeed * deltaTime;
-            if (attacker.attackProgress >= 1f)
-            {
-                Unit target = GetTarget(attacker, defenderTeamId);
-                if (target != null)
-                    RequestAttackAnimation(attacker, target);
-                else
-                    players[defenderTeamId].TakeDamage(Mathf.RoundToInt(attacker.FinalAtk));
-
-                attacker.attackProgress -= 1f;
-            }
+            TickSkill(attacker, defenderTeamId, deltaTime);
+            TickBasicAttack(attacker, defenderTeamId, deltaTime);
         }
     }
 
+    private void TickTimers(Unit u, float dt)
+    {
+        if (u.antiHealTimer > 0) u.antiHealTimer -= dt;
+        if (u.vulnerabilityTimer > 0) u.vulnerabilityTimer -= dt;
+        if (u.commanderBuffTimer > 0) u.commanderBuffTimer -= dt;
+        if (u.duelistRegenBuffTimer > 0) u.duelistRegenBuffTimer -= dt;
+        if (u.slowTimer > 0) u.slowTimer -= dt;
+        if (u.voidAntiHealTimer > 0) u.voidAntiHealTimer -= dt;
+        if (u.voidDefDebuffTimer > 0) u.voidDefDebuffTimer -= dt;
+        if (u.voidSlowTimer > 0) u.voidSlowTimer -= dt;
+        if (u.burnTimer > 0) u.burnTimer -= dt;
+    }
+
+    private void TickRegen(Unit u, float dt)
+    {
+        float rate = u.baseRegen;
+        if (u.commanderBuffTimer > 0) rate += 0.04f;
+        if (u.duelistRegenBuffTimer > 0) rate += 0.02f;
+        if (rate > 0 && u.currentHp < u.maxHp)
+            u.Heal(u.maxHp * rate * dt);
+    }
+
+    private void TickBurn(Unit u, float dt)
+    {
+        // El burn ya se decrementó en TickTimers; aplicamos el daño si sigue activo
+        if (u.burnDps > 0 && u.burnTimer > 0)
+            u.TakeDamage(u.burnDps * dt);
+        else if (u.burnTimer <= 0)
+            u.burnDps = 0f;
+    }
+
+    private void TickSkill(Unit attacker, int defenderTeamId, float dt)
+    {
+        if (attacker.skillCooldown <= 0) return;
+        attacker.currentSkillTimer += dt;
+        if (attacker.currentSkillTimer >= attacker.skillCooldown)
+        {
+            ExecuteSkill(attacker, defenderTeamId);
+            attacker.currentSkillTimer = 0f;
+        }
+    }
+
+    private void TickBasicAttack(Unit attacker, int defenderTeamId, float dt)
+    {
+        attacker.attackProgress += attacker.FinalSpeed * dt;
+        if (attacker.attackProgress < 1f) return;
+
+        Unit target = GetTarget(attacker, defenderTeamId);
+        if (target != null)
+            RequestAttackAnimation(attacker, target);
+        else
+            players[defenderTeamId].TakeDamage(Mathf.RoundToInt(attacker.FinalAtk));
+
+        attacker.attackProgress -= 1f;
+    }
+
     // ─── SOLICITUD DE ANIMACIÓN (ataque básico) ───────────────────────────────
-    // No aplica daño aquí. Calcula cuánto daño hará y lo empaqueta en una Action
-    // que el VisualController llamará cuando la bala/puño llegue al objetivo.
     private void RequestAttackAnimation(Unit attacker, Unit target)
     {
-        // Capturamos todo lo que necesitamos en el closure para que sea válido
-        // aunque el estado del juego cambie durante la animación.
-        float savedDamageMultiplier = attacker.damageMultiplier;
-        float savedLifesteal = attacker.baseLifesteal;
-        bool savedVulnActive = target.vulnerabilityTimer > 0;
-        bool savedVoidOwner = attacker.ownerId == 1;
-        int defenderTeamId = 1 - attacker.ownerId;
+        float snapDmgMult = attacker.damageMultiplier;
+        float snapLifesteal = attacker.baseLifesteal;
+        bool snapVuln = target.vulnerabilityTimer > 0;
+        bool isVoidOwner = attacker.ownerId == 1;
 
         Action onImpact = () =>
         {
-            // Guard: si alguno murió durante la animación, cancelamos el daño
             if (attacker.IsDead || target.IsDead) return;
 
-            float mitigationFactor = 100f / (100f + target.FinalDef);
-            float realDamage = attacker.FinalAtk * mitigationFactor * savedDamageMultiplier;
-            if (savedVulnActive) realDamage *= 1.25f;
+            float mitigation = 100f / (100f + target.FinalDef);
+            float dmg = attacker.FinalAtk * mitigation * snapDmgMult;
+            if (snapVuln) dmg *= 1.25f;
 
-            target.TakeDamage(realDamage);
+            target.TakeDamage(dmg);
 
-            float activeLifesteal = savedLifesteal;
-            if (savedVoidOwner && savedVulnActive) activeLifesteal += 0.10f;
-            if (activeLifesteal > 0) attacker.Heal(realDamage * activeLifesteal);
+            float ls = snapLifesteal + (isVoidOwner && snapVuln ? 0.10f : 0f);
+            if (ls > 0) attacker.Heal(dmg * ls);
 
-            LogMessage(attacker.ownerId,
-                $"<color=white>{attacker.cardId} → {target.cardId}: -{realDamage:F0} dmg</color>");
-
-            // Limpieza y revisión de muerte inline (sin esperar al siguiente tick)
             CleanUpDeadUnits(0);
             CleanUpDeadUnits(1);
             CheckWinCondition();
@@ -283,132 +482,87 @@ public class GameManager : MonoBehaviour
 
         switch (caster.cardId)
         {
-            // Sollar Duelist — AoE melee: el daño también se difiere al impacto
             case CardID.SollarDuelist:
                 {
-                    // Recopilamos los objetivos en rango AHORA (antes de la animación)
-                    List<Unit> targetsInRange = new List<Unit>();
-                    foreach (Unit enemy in activeUnits[enemyTeamId])
-                        if (!enemy.IsDead && Vector2.Distance(caster.logicalPosition, enemy.logicalPosition) <= 2.5f)
-                            targetsInRange.Add(enemy);
+                    List<Unit> inRange = new List<Unit>();
+                    foreach (Unit e in activeUnits[enemyTeamId])
+                        if (!e.IsDead && Vector2.Distance(caster.logicalPosition, e.logicalPosition) <= 2.5f)
+                            inRange.Add(e);
 
-                    if (targetsInRange.Count == 0) break;
+                    if (inRange.Count == 0) break;
 
                     Action onSpinImpact = () =>
                     {
-                        float totalDamageDealt = 0;
-                        foreach (Unit enemy in targetsInRange)
-                        {
-                            if (enemy.IsDead) continue;
-                            enemy.TakeDamage(55f);
-                            totalDamageDealt += 55f;
-                        }
-                        if (totalDamageDealt > 0)
-                        {
-                            caster.Heal(totalDamageDealt * 0.15f);
-                            caster.duelistRegenBuffTimer = 2.0f;
-                        }
+                        float total = 0;
+                        foreach (Unit e in inRange) { if (!e.IsDead) { e.TakeDamage(55f); total += 55f; } }
+                        if (total > 0) { caster.Heal(total * 0.15f); caster.duelistRegenBuffTimer = 2f; }
                         CleanUpDeadUnits(0); CleanUpDeadUnits(1); CheckWinCondition();
                     };
-
-                    // Reutilizamos el canal de animación con un "target" representativo
-                    // para que el VisualController sepa dónde animar el spin.
-                    // El callback de impacto afectará a TODOS los targets en rango.
-                    OnAttackAnimationRequested?.Invoke(caster, targetsInRange[0], onSpinImpact);
+                    OnAttackAnimationRequested?.Invoke(caster, inRange[0], onSpinImpact);
                     break;
                 }
 
-            // Sollar Commander — buff instantáneo (no necesita animación de impacto)
             case CardID.SollarCommander:
                 {
                     foreach (Unit ally in activeUnits[caster.ownerId])
                         if (!ally.IsDead && Vector2.Distance(caster.logicalPosition, ally.logicalPosition) <= 5f)
-                            ally.commanderBuffTimer = 4.0f;
+                            ally.commanderBuffTimer = 4f;
                     break;
                 }
 
-            // SOL-9 "Aegis Unit" — Disruption Barrage
-            // Cada proyectil tiene su propio callback de impacto diferido.
+            // SOL-9 Disruption Barrage — 3 proyectiles, daño diferido al impacto
             case CardID.SollarForce:
                 {
                     Unit barTarget = GetTarget(caster, enemyTeamId);
                     if (barTarget == null) break;
 
-                    const int PROJECTILES = 3;
-                    const float DMG_PER = 25f;
-                    const float ANTI_HEAL_DUR = 3f;
-                    const float SLOW_DUR = 2f;
-                    const float SLOW_AMT = 0.10f;
-                    const float STAGGER_DUR = 0.5f;
-                    const int STAGGER_THRESHOLD = 2;
-
-                    // Reset del contador ANTES de lanzar los proyectiles
                     barTarget.projectileHitCount = 0;
 
-                    for (int p = 0; p < PROJECTILES; p++)
+                    for (int p = 0; p < 3; p++)
                     {
-                        // Capturamos p por valor en el closure
                         int projIndex = p;
-
-                        Action onProjectileImpact = () =>
+                        Action onHit = () =>
                         {
                             if (caster.IsDead || barTarget.IsDead) return;
-
-                            float mitigation = 100f / (100f + barTarget.FinalDef);
-                            barTarget.TakeDamage(DMG_PER * mitigation);
-
-                            barTarget.antiHealTimer = ANTI_HEAL_DUR;
-                            barTarget.slowTimer = SLOW_DUR;
-                            barTarget.slowPercent = SLOW_AMT;
+                            float dmg = 25f * (100f / (100f + barTarget.FinalDef));
+                            barTarget.TakeDamage(dmg);
+                            barTarget.antiHealTimer = 3f;
+                            barTarget.slowTimer = 2f;
+                            barTarget.slowPercent = 0.10f;
                             barTarget.projectileHitCount++;
 
-                            // Stagger al segundo impacto (no esperamos al tercero)
-                            if (barTarget.projectileHitCount == STAGGER_THRESHOLD)
+                            if (barTarget.projectileHitCount == 2)
                             {
-                                barTarget.stunTimer = STAGGER_DUR;
-                                LogMessage(-1,
-                                    $"<color=cyan>[SOL-9] Stagger aplicado a {barTarget.cardId}!</color>");
+                                barTarget.stunTimer = 0.5f;
+                                LogMessage(-1, $"<color=cyan>[SOL-9] Stagger → {barTarget.cardId}</color>");
                             }
-
-                            LogMessage(-1,
-                                $"<color=cyan>[SOL-9] Impacto {projIndex + 1}/3 → {barTarget.cardId}</color>");
-
                             CleanUpDeadUnits(0); CleanUpDeadUnits(1); CheckWinCondition();
                         };
-
-                        OnSOL9ProjectileRequested?.Invoke(caster, barTarget, p, onProjectileImpact);
+                        OnSOL9ProjectileRequested?.Invoke(caster, barTarget, p, onHit);
                     }
                     break;
                 }
 
-            // Void Commander — debuff instantáneo
             case CardID.VoidCommander:
                 {
-                    Unit targetCom = GetTarget(caster, enemyTeamId);
-                    if (targetCom != null) targetCom.vulnerabilityTimer = 4.0f;
+                    Unit t = GetTarget(caster, enemyTeamId);
+                    if (t != null) t.vulnerabilityTimer = 4f;
                     break;
                 }
 
-            // Void Heavy Shooter — daño diferido al impacto del proyectil
             case CardID.VoidHeavyShooter:
                 {
-                    Unit targetShooter = GetTarget(caster, enemyTeamId);
-                    if (targetShooter == null) break;
-
-                    bool hadDebuffAtCast = targetShooter.antiHealTimer > 0
-                                        || targetShooter.vulnerabilityTimer > 0
-                                        || targetShooter.stunTimer > 0
-                                        || targetShooter.slowTimer > 0;
-
-                    Action onShooterImpact = () =>
+                    Unit t = GetTarget(caster, enemyTeamId);
+                    if (t == null) break;
+                    bool hadDebuff = t.antiHealTimer > 0 || t.vulnerabilityTimer > 0
+                                  || t.stunTimer > 0 || t.slowTimer > 0;
+                    Action onHit = () =>
                     {
-                        if (targetShooter.IsDead) return;
-                        float finalDmg = hadDebuffAtCast ? 75f * 1.30f : 75f;
-                        targetShooter.TakeDamage(finalDmg);
+                        if (t.IsDead) return;
+                        t.TakeDamage(hadDebuff ? 75f * 1.30f : 75f);
                         CleanUpDeadUnits(0); CleanUpDeadUnits(1); CheckWinCondition();
                     };
-
-                    OnAttackAnimationRequested?.Invoke(caster, targetShooter, onShooterImpact);
+                    OnAttackAnimationRequested?.Invoke(caster, t, onHit);
                     break;
                 }
         }
@@ -417,20 +571,19 @@ public class GameManager : MonoBehaviour
     // ─── SELECCIÓN DE OBJETIVO ────────────────────────────────────────────────
     private Unit GetTarget(Unit attacker, int enemyTeamId)
     {
-        bool isFrontlineAlive = activeUnits[enemyTeamId].Exists(u => !u.IsDead && u.row == 0);
-        int targetRow = isFrontlineAlive ? 0 : 1;
+        bool frontlineAlive = activeUnits[enemyTeamId].Exists(u => !u.IsDead && u.row == 0);
+        int targetRow = frontlineAlive ? 0 : 1;
 
-        Unit bestTarget = null;
-        float closestDist = float.MaxValue;
+        Unit best = null;
+        float best_dist = float.MaxValue;
 
-        foreach (Unit enemy in activeUnits[enemyTeamId])
+        foreach (Unit e in activeUnits[enemyTeamId])
         {
-            if (enemy.IsDead) continue;
-            if (enemy.row != targetRow) continue;
-            float dist = Vector2.Distance(attacker.logicalPosition, enemy.logicalPosition);
-            if (dist < closestDist) { closestDist = dist; bestTarget = enemy; }
+            if (e.IsDead || e.row != targetRow) continue;
+            float d = Vector2.Distance(attacker.logicalPosition, e.logicalPosition);
+            if (d < best_dist) { best_dist = d; best = e; }
         }
-        return bestTarget;
+        return best;
     }
 
     // ─── LIMPIEZA ─────────────────────────────────────────────────────────────
@@ -438,13 +591,11 @@ public class GameManager : MonoBehaviour
     {
         for (int i = activeUnits[playerId].Count - 1; i >= 0; i--)
         {
-            if (activeUnits[playerId][i].IsDead)
-            {
-                Unit fallen = activeUnits[playerId][i];
-                OnUnitDied?.Invoke(playerId, fallen);
-                activeUnits[playerId].RemoveAt(i);
-                LogMessage(playerId, $"<color=gray>Unidad {fallen.cardId} eliminada.</color>");
-            }
+            if (!activeUnits[playerId][i].IsDead) continue;
+            Unit fallen = activeUnits[playerId][i];
+            OnUnitDied?.Invoke(playerId, fallen);
+            activeUnits[playerId].RemoveAt(i);
+            LogMessage(playerId, $"<color=gray>{fallen.cardId} eliminada.</color>");
         }
     }
 
@@ -453,26 +604,22 @@ public class GameManager : MonoBehaviour
     {
         if (currentPhase != RoundPhase.Combat) return;
 
-        int p0Count = activeUnits[0].Count;
-        int p1Count = activeUnits[1].Count;
+        // Modificación: Contar estrictamente unidades que no estén muertas
+        int p0Alive = 0;
+        int p1Alive = 0;
+        foreach (var u in activeUnits[0]) if (!u.IsDead) p0Alive++;
+        foreach (var u in activeUnits[1]) if (!u.IsDead) p1Alive++;
 
-        if (p0Count == 0 || p1Count == 0)
-        {
-            currentPhase = RoundPhase.End;
+        if (p0Alive > 0 && p1Alive > 0) return;
 
-            if (p0Count == 0 && p1Count == 0)
-                LogMessage(-1, "<b><color=white>RESULTADO: EMPATE</color></b>");
-            else if (p0Count == 0)
-                LogMessage(-1, "<b><color=purple>RESULTADO: VICTORIA DEL VACÍO</color></b>");
-            else
-                LogMessage(-1, "<b><color=orange>RESULTADO: VICTORIA SOLAR</color></b>");
+        currentPhase = RoundPhase.End;
 
-            OnPhaseChanged?.Invoke(currentPhase);
-        }
+        if (p0Alive == 0 && p1Alive == 0) LogMessage(-1, "<b><color=white>EMPATE</color></b>");
+        else if (p0Alive == 0) LogMessage(-1, "<b><color=purple>VICTORIA DEL VACÍO</color></b>");
+        else LogMessage(-1, "<b><color=orange>VICTORIA SOLAR</color></b>");
+
+        OnPhaseChanged?.Invoke(currentPhase);
     }
 
-    public void LogMessage(int playerId, string message)
-    {
-        OnLogMessage?.Invoke(playerId, message);
-    }
+    public void LogMessage(int playerId, string msg) => OnLogMessage?.Invoke(playerId, msg);
 }

@@ -9,29 +9,22 @@ public class UnitWorldUI : MonoBehaviour
     public Image healthFill;
 
     [Header("Combat References")]
-    [Tooltip("Arrastra aquí un objeto vacío posicionado en la punta del arma.")]
-    public Transform shootPoint; // NUEVO: Punto exacto de salida de la bala
+    [Tooltip("Objeto vacío posicionado en la punta del arma. " +
+             "Si está asignado, la unidad se trata como Ranged.")]
+    public Transform shootPoint;
 
     private Unit _trackedUnit;
 
     public void Initialize(Unit unitData)
     {
         _trackedUnit = unitData;
-
-        if (nameText != null)
-        {
-            nameText.text = unitData.cardId.ToString();
-        }
+        if (nameText != null) nameText.text = unitData.cardId.ToString();
     }
 
     private void Update()
     {
-        if (_trackedUnit != null && healthFill != null)
-        {
-            if (_trackedUnit.maxHp > 0)
-            {
-                healthFill.fillAmount = _trackedUnit.currentHp / _trackedUnit.maxHp;
-            }
-        }
+        if (_trackedUnit == null || healthFill == null) return;
+        if (_trackedUnit.maxHp > 0)
+            healthFill.fillAmount = Mathf.Clamp01(_trackedUnit.currentHp / _trackedUnit.maxHp);
     }
 }

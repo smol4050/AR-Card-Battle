@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.AI;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -7,21 +8,39 @@ public class VisualController : MonoBehaviour
 {
     public GameManager gameManager;
 
-    [Header("Sollar Prefabs")]
+    [Header("Sollar Prefabs — Unidades")]
     public GameObject prefabSollarDuelist;
-    public GameObject prefabSollarForce;
+    public GameObject prefabSollarForce;      // SOL-9
     public GameObject prefabSollarCommander;
 
-    [Header("Void Prefabs")]
+    [Header("Void Prefabs — Unidades")]
     public GameObject prefabVoidHorde;
     public GameObject prefabVoidCommander;
     public GameObject prefabVoidHeavyShooter;
 
+    [Header("Naves - Setup P0")]
+    public Transform p0ShipEntryPoint;       // Punto X donde aparece
+    public Transform p0ShipBoardPoint;       // Punto donde se posiciona para la batalla
+    public Transform p0ShipConvergencePoint; // Punto donde se une la energía
+    public Transform[] p0ShipPatrolPoints;   // Puntos por donde se mueve en combate
+
+    [Header("Naves - Setup P1")]
+    public Transform p1ShipEntryPoint;
+    public Transform p1ShipBoardPoint;
+    public Transform p1ShipConvergencePoint;
+    public Transform[] p1ShipPatrolPoints;
+
+    [Header("Ship Prefabs")]
+    public GameObject prefabSolarVanguard;    // nave Sollar (posee múltiples shootPoints)
+    public GameObject prefabAbyssReaper;      // nave Void
+
     [Header("VFX Prefabs")]
     public GameObject prefabVoidBullet;
     public GameObject prefabSollarBullet;
-    public GameObject prefabForceImpact;
+    public GameObject prefabAbyssPulse;       // VFX del pulso de la nave Void
+    public GameObject prefabSolarBlast;       // VFX del impacto de la nave Sollar
     public GameObject prefabStaggerFX;
+    public GameObject prefabBurnFX;
 
     [Header("Áreas Base")]
     public Transform p0BoardArea;
@@ -35,26 +54,24 @@ public class VisualController : MonoBehaviour
     public Transform[] p1FrontSlots = new Transform[3];
     public Transform[] p1BackSlots = new Transform[3];
 
-    // ── Parámetros del Animator (deben coincidir exactamente con los del controller) ──
-    // JovenController  → Velocidad (Float), Atacar (Trigger), Morir (Trigger)
-    // TropasController → Velocidad (Float), Atacar (Trigger), Morir (Trigger)
+    [Header("Posiciones de spawn de nave")]
+    [Tooltip("Punto donde aparece la nave del jugador 0")]
+    public Transform p0ShipSpawnPoint;
+    [Tooltip("Punto donde aparece la nave del jugador 1")]
+    public Transform p1ShipSpawnPoint;
+
+    [Header("Configuración")]
+    public float deathDestroyDelay = 2.5f;
+    public float hitParticlesDuration = 0.6f;
+
+    // Parámetros de Animator (deben coincidir con los AnimatorControllers de los prefabs)
     private static readonly int ANIM_VELOCIDAD = Animator.StringToHash("Velocidad");
     private static readonly int ANIM_ATACAR = Animator.StringToHash("Atacar");
     private static readonly int ANIM_NUM_ATAQUE = Animator.StringToHash("NumAtaque");
     private static readonly int ANIM_MORIR = Animator.StringToHash("Morir");
 
-    // Cuánto tiempo esperar antes de destruir el GameObject tras morir
-    // (debe ser >= duración de la animación de muerte)
-    [Header("Configuración de Muerte")]
-    [Tooltip("Segundos que tarda en destruirse el personaje tras morir (ajusta según la animación)")]
-    public float deathDestroyDelay = 2.5f;
-
-    // Duración en segundos del efecto de partículas al golpear
-    [Header("Partículas de Golpe")]
-    [Tooltip("Cuántos segundos dura el sistema de partículas al impactar")]
-    public float hitParticlesDuration = 0.6f;
-
     private Dictionary<Unit, GameObject> _visualUnits = new Dictionary<Unit, GameObject>();
+    private Dictionary<ShipInstance, GameObject> _visualShips = new Dictionary<ShipInstance, GameObject>();
 
     // ─── SUSCRIPCIÓN ──────────────────────────────────────────────────────────
     private void OnEnable()
@@ -62,9 +79,11 @@ public class VisualController : MonoBehaviour
         gameManager.OnUnitSpawned += HandleUnitSpawned;
         gameManager.OnUnitDied += HandleUnitDied;
         gameManager.OnUnitSkillCast += HandleUnitSkillCast;
-        gameManager.OnVisualEffectRequested += HandleVisualEffectRequested;
         gameManager.OnAttackAnimationRequested += HandleAttackAnimationRequested;
         gameManager.OnSOL9ProjectileRequested += HandleSOL9ProjectileRequested;
+        gameManager.OnShipSpawned += HandleShipSpawned;
+        gameManager.OnShipExpired += HandleShipExpired;
+        gameManager.OnShipPulseFired += HandleShipPulseFired;
     }
 
     private void OnDisable()
@@ -73,53 +92,61 @@ public class VisualController : MonoBehaviour
         gameManager.OnUnitSpawned -= HandleUnitSpawned;
         gameManager.OnUnitDied -= HandleUnitDied;
         gameManager.OnUnitSkillCast -= HandleUnitSkillCast;
-        gameManager.OnVisualEffectRequested -= HandleVisualEffectRequested;
         gameManager.OnAttackAnimationRequested -= HandleAttackAnimationRequested;
         gameManager.OnSOL9ProjectileRequested -= HandleSOL9ProjectileRequested;
+        gameManager.OnShipSpawned -= HandleShipSpawned;
+        gameManager.OnShipExpired -= HandleShipExpired;
+        gameManager.OnShipPulseFired -= HandleShipPulseFired;
     }
 
-    // ─── SPAWN ────────────────────────────────────────────────────────────────
+    // ─── SPAWN DE UNIDAD ──────────────────────────────────────────────────────
     private void HandleUnitSpawned(int playerId, Unit unitData)
     {
-        GameObject prefabToUse = GetPrefabByCardId(unitData.cardId);
-        if (prefabToUse == null) return;
+        GameObject prefab = GetUnitPrefab(unitData.cardId);
+        if (prefab == null) return;
 
-        Vector3 exactWorldPos;
-        if (playerId == 0)
-        {
-            Transform slot = (unitData.row == 0)
-                ? p0FrontSlots[unitData.slotIndex]
-                : p0BackSlots[unitData.slotIndex - 3];
-            exactWorldPos = slot.position;
-        }
-        else
-        {
-            Transform slot = (unitData.row == 0)
-                ? p1FrontSlots[unitData.slotIndex]
-                : p1BackSlots[unitData.slotIndex - 3];
-            exactWorldPos = slot.position;
-        }
+        Vector3 worldPos = GetSlotWorldPos(playerId, unitData.row, unitData.slotIndex);
+        Transform boardArea = (playerId == 0) ? p0BoardArea : p1BoardArea;
 
-        Transform baseRotArea = (playerId == 0) ? p0BoardArea : p1BoardArea;
-        GameObject newUnit = Instantiate(prefabToUse, exactWorldPos, baseRotArea.rotation);
+        GameObject go = Instantiate(prefab, worldPos, boardArea.rotation);
 
-        UnitWorldUI ui = newUnit.GetComponent<UnitWorldUI>();
+        // Inicializar UI
+        UnitWorldUI ui = go.GetComponent<UnitWorldUI>();
         if (ui != null) ui.Initialize(unitData);
 
-        _visualUnits[unitData] = newUnit;
-        Vector3 offset = exactWorldPos - baseRotArea.position;
+        // Posición lógica
+        Vector3 offset = worldPos - boardArea.position;
         unitData.logicalPosition = new Vector2(offset.x, offset.z);
 
-        // Asegurar que el personaje empiece en idle
-        Animator anim = newUnit.GetComponent<Animator>();
+        // NavMeshAgent: el movimiento real lo controla el VisualController en las corrutinas
+        NavMeshAgent agent = go.GetComponent<NavMeshAgent>();
+        if (agent != null)
+        {
+            agent.speed = unitData.FinalSpeed * 3f;  // escala world-units/s
+            agent.stoppingDistance = 0.1f;
+            agent.autoBraking = true;
+        }
+
+        // Animator idle
+        Animator anim = go.GetComponent<Animator>();
         if (anim != null) anim.SetFloat(ANIM_VELOCIDAD, 0f);
 
-        // Asegurar que el sistema de partículas empiece apagado
-        ParticleSystem ps = newUnit.GetComponentInChildren<ParticleSystem>();
-        if (ps != null && ps.isPlaying) ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+        // Partículas apagadas al inicio
+        foreach (ParticleSystem ps in go.GetComponentsInChildren<ParticleSystem>(true))
+            if (ps.isPlaying) ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+
+        _visualUnits[unitData] = go;
     }
 
-    private GameObject GetPrefabByCardId(CardID id)
+    private Vector3 GetSlotWorldPos(int playerId, int row, int slotIndex)
+    {
+        if (playerId == 0)
+            return (row == 0) ? p0FrontSlots[slotIndex].position : p0BackSlots[slotIndex - 3].position;
+        else
+            return (row == 0) ? p1FrontSlots[slotIndex].position : p1BackSlots[slotIndex - 3].position;
+    }
+
+    private GameObject GetUnitPrefab(CardID id)
     {
         switch (id)
         {
@@ -136,264 +163,321 @@ public class VisualController : MonoBehaviour
     // ─── MUERTE ───────────────────────────────────────────────────────────────
     private void HandleUnitDied(int playerId, Unit unit)
     {
-        if (!_visualUnits.TryGetValue(unit, out GameObject obj)) return;
-        if (obj == null) { _visualUnits.Remove(unit); return; }
-
-        // Primero animar, DESPUÉS destruir con delay
-        Animator anim = obj.GetComponent<Animator>();
-        if (anim != null)
-        {
-            anim.SetFloat(ANIM_VELOCIDAD, 0f);
-            anim.SetTrigger(ANIM_MORIR);
-        }
-
+        if (!_visualUnits.TryGetValue(unit, out GameObject go)) return;
         _visualUnits.Remove(unit);
-        StartCoroutine(DelayedDestroy(obj, deathDestroyDelay));
+        if (go == null) return;
+
+        // Desactivar NavMeshAgent para que no interfiera con la animación de muerte
+        NavMeshAgent agent = go.GetComponent<NavMeshAgent>();
+        if (agent != null) agent.enabled = false;
+
+        Animator anim = go.GetComponent<Animator>();
+        if (anim != null) { anim.SetFloat(ANIM_VELOCIDAD, 0f); anim.SetTrigger(ANIM_MORIR); }
+
+        StartCoroutine(DelayedDestroy(go, deathDestroyDelay));
     }
 
-    private IEnumerator DelayedDestroy(GameObject obj, float delay)
+    private IEnumerator DelayedDestroy(GameObject go, float delay)
     {
         yield return new WaitForSeconds(delay);
-        if (obj != null) Destroy(obj);
+        if (go != null) Destroy(go);
     }
 
-    // ─── EFECTO VISUAL GENÉRICO ───────────────────────────────────────────────
-    private void HandleVisualEffectRequested(Unit caster, Unit target, string effectName)
+    // ─── SPAWN Y EXPIRACIÓN DE NAVE ───────────────────────────────────────────
+    private void HandleShipSpawned(int ownerId, ShipInstance ship)
     {
-        if (target != null && _visualUnits.TryGetValue(target, out GameObject targetObj))
+        GameObject prefab = (ship.cardId == CardID.SolarVanguard) ? prefabSolarVanguard : prefabAbyssReaper;
+        if (prefab == null) return;
+
+        Transform entryPoint = (ownerId == 0) ? p0ShipEntryPoint : p1ShipEntryPoint;
+        Transform boardPoint = (ownerId == 0) ? p0ShipBoardPoint : p1ShipBoardPoint;
+        Transform[] patrolPoints = (ownerId == 0) ? p0ShipPatrolPoints : p1ShipPatrolPoints;
+
+        if (entryPoint == null || boardPoint == null) return;
+
+        GameObject go = Instantiate(prefab, entryPoint.position, entryPoint.rotation);
+        _visualShips[ship] = go;
+
+        // Iniciar secuencia completa: Entrar -> Patrullar
+        StartCoroutine(AnimateShipEntryAndPatrol(go, entryPoint.position, boardPoint.position, patrolPoints));
+    }
+
+    private void HandleShipExpired(int ownerId, ShipInstance ship)
+    {
+        if (!_visualShips.TryGetValue(ship, out GameObject go)) return;
+        _visualShips.Remove(ship);
+        if (go != null) StartCoroutine(AnimateShipExit(go));
+    }
+
+    private IEnumerator AnimateShipEntryAndPatrol(GameObject shipGo, Vector3 startPos, Vector3 boardPos, Transform[] patrolPoints)
+    {
+        // 1. Animación de entrada
+        float elapsed = 0f, dur = 1.5f;
+        while (elapsed < dur && shipGo != null)
         {
-            if (targetObj == null) return;
-            if (effectName == "ForceHit" && prefabForceImpact != null)
-                Instantiate(prefabForceImpact, targetObj.transform.position + Vector3.up, Quaternion.identity);
+            elapsed += Time.deltaTime;
+            // Usar una curva de interpolación suave (Ease-Out)
+            float t = 1f - Mathf.Pow(1f - (elapsed / dur), 3f);
+            shipGo.transform.position = Vector3.Lerp(startPos, boardPos, t);
+            yield return null;
+        }
+
+        // 2. Patrullaje en combate
+        if (patrolPoints == null || patrolPoints.Length == 0) yield break;
+
+        int currentPatrolIndex = 0;
+        while (shipGo != null)
+        {
+            Vector3 targetPatrol = patrolPoints[currentPatrolIndex].position;
+            // Moverse hacia el punto de patrullaje lentamente
+            shipGo.transform.position = Vector3.MoveTowards(shipGo.transform.position, targetPatrol, 1.5f * Time.deltaTime);
+
+            if (Vector3.Distance(shipGo.transform.position, targetPatrol) < 0.1f)
+            {
+                currentPatrolIndex = (currentPatrolIndex + 1) % patrolPoints.Length;
+            }
+            yield return null;
         }
     }
 
-    // ─── ATAQUE BÁSICO (RANGED Y MELEE) ──────────────────────────────────────
-    // Recibe el callback onImpact del GameManager y lo ejecuta cuando la
-    // bala llega al objetivo o cuando el puño conecta en la animación melee.
+    private IEnumerator AnimateShipExit(GameObject go)
+    {
+        if (go == null) yield break;
+        Vector3 startPos = go.transform.position;
+        Vector3 endPos = startPos + Vector3.up * 8f;
+        float elapsed = 0f, dur = 0.6f;
+        while (elapsed < dur && go != null)
+        {
+            elapsed += Time.deltaTime;
+            go.transform.position = Vector3.Lerp(startPos, endPos, elapsed / dur);
+            yield return null;
+        }
+        if (go != null) Destroy(go);
+    }
+
+    // ─── PULSO DE NAVE ────────────────────────────────────────────────────────
+    private void HandleShipPulseFired(int ownerId, ShipInstance ship, int pulseIndex, List<Unit> targetsHit)
+    {
+        if (!_visualShips.TryGetValue(ship, out GameObject shipGo) || shipGo == null) return;
+
+        Transform[] shootPoints = GetShipShootPoints(shipGo);
+        Transform convergencePoint = (ownerId == 0) ? p0ShipConvergencePoint : p1ShipConvergencePoint;
+
+        if (ship.cardId == CardID.SolarVanguard)
+            StartCoroutine(FireConvergingBarrage(shootPoints, convergencePoint, targetsHit, prefabSollarBullet, prefabSolarBlast));
+        else
+            StartCoroutine(FireConvergingBarrage(shootPoints, convergencePoint, targetsHit, prefabVoidBullet, prefabAbyssPulse));
+    }
+
+    private IEnumerator FireConvergingBarrage(Transform[] shootPoints, Transform convergencePoint, List<Unit> targets, GameObject projectilePrefab, GameObject blastPrefab)
+    {
+        if (convergencePoint == null || projectilePrefab == null) yield break;
+
+        // Fase 1: Energía desde los puntos de disparo de la nave hasta el punto de convergencia
+        List<GameObject> chargeParticles = new List<GameObject>();
+        foreach (Transform sp in shootPoints)
+        {
+            GameObject charge = Instantiate(projectilePrefab, sp.position, Quaternion.identity);
+            charge.transform.LookAt(convergencePoint);
+            chargeParticles.Add(charge);
+        }
+
+        float chargeTime = 0f, chargeDuration = 0.3f;
+        while (chargeTime < chargeDuration)
+        {
+            chargeTime += Time.deltaTime;
+            for (int i = 0; i < chargeParticles.Count; i++)
+            {
+                if (chargeParticles[i] != null)
+                {
+                    chargeParticles[i].transform.position = Vector3.Lerp(shootPoints[i % shootPoints.Length].position, convergencePoint.position, chargeTime / chargeDuration);
+                }
+            }
+            yield return null;
+        }
+
+        // Limpiar partículas de carga
+        foreach (var p in chargeParticles) if (p != null) Destroy(p);
+
+        // Opcional: Pequeña explosión en el punto de convergencia antes de disparar
+        if (blastPrefab != null) Instantiate(blastPrefab, convergencePoint.position, Quaternion.identity);
+
+        // Fase 2: Disparar desde el punto de convergencia hacia los objetivos
+        foreach (Unit target in targets)
+        {
+            if (_visualUnits.TryGetValue(target, out GameObject defObj) && defObj != null)
+            {
+                StartCoroutine(AnimateProjectile(convergencePoint.position, defObj.transform.position + Vector3.up, projectilePrefab, blastPrefab));
+            }
+            yield return new WaitForSeconds(0.05f); // Micro-retraso para un efecto ametralladora
+        }
+    }
+
+    private IEnumerator AnimateProjectile(Vector3 start, Vector3 end, GameObject bulletPrefab, GameObject impactPrefab)
+    {
+        GameObject bullet = Instantiate(bulletPrefab, start, Quaternion.identity);
+        bullet.transform.LookAt(end);
+
+        float t = 0f, dur = 0.15f;
+        while (t < dur && bullet != null)
+        {
+            t += Time.deltaTime;
+            bullet.transform.position = Vector3.Lerp(start, end, t / dur);
+            yield return null;
+        }
+        if (bullet != null) Destroy(bullet);
+        if (impactPrefab != null) Instantiate(impactPrefab, end, Quaternion.identity);
+    }
+
+    // Recoge todos los hijos del prefab de nave con el tag "ShootPoint"
+    // El prefab debe tener esos objetos etiquetados correctamente.
+    private Transform[] GetShipShootPoints(GameObject shipGo)
+    {
+        List<Transform> points = new List<Transform>();
+        foreach (Transform child in shipGo.GetComponentsInChildren<Transform>(true))
+            if (child.CompareTag("ShootPoint"))
+                points.Add(child);
+
+        // Si no hay ninguno etiquetado, usamos el root como fallback
+        if (points.Count == 0) points.Add(shipGo.transform);
+        return points.ToArray();
+    }
+
+    // Solar Vanguard: dispara un proyectil desde cada shootPoint hacia los objetivos,
+    // repartiendo los targets entre los puntos disponibles.
+    private IEnumerator FireSolarVanguardBarrage(
+        GameObject shipGo, Transform[] shootPoints, List<Unit> targets)
+    {
+        if (targets.Count == 0) yield break;
+
+        for (int i = 0; i < targets.Count; i++)
+        {
+            Unit target = targets[i];
+            Transform from = shootPoints[i % shootPoints.Length];
+
+            if (!_visualUnits.TryGetValue(target, out GameObject defObj) || defObj == null) continue;
+
+            GameObject bulletPrefab = prefabSollarBullet != null ? prefabSollarBullet : prefabVoidBullet;
+            if (bulletPrefab == null) continue;
+
+            // Lanzamos cada proyectil en paralelo (sin yield entre ellos)
+            StartCoroutine(AnimateShipProjectile(from.position,
+                defObj.transform.position + Vector3.up,
+                bulletPrefab, prefabSolarBlast));
+
+            // Pequeño escalonamiento visual (no lógico — el daño ya se aplicó)
+            yield return new WaitForSeconds(0.05f);
+        }
+    }
+
+    // Abyss Reaper: onda expansiva desde la posición de la nave
+    private IEnumerator FireAbyssReaperPulse(GameObject shipGo, List<Unit> targets)
+    {
+        if (prefabAbyssPulse != null)
+            Instantiate(prefabAbyssPulse, shipGo.transform.position, Quaternion.identity);
+
+        // Efecto de impacto en cada unidad afectada
+        foreach (Unit target in targets)
+        {
+            if (_visualUnits.TryGetValue(target, out GameObject defObj) && defObj != null)
+                PlayHitParticles(defObj);
+        }
+        yield break;
+    }
+
+    private IEnumerator AnimateShipProjectile(
+        Vector3 start, Vector3 end, GameObject bulletPrefab, GameObject impactPrefab)
+    {
+        GameObject bullet = Instantiate(bulletPrefab, start, Quaternion.identity);
+        bullet.transform.LookAt(end);
+
+        float t = 0f, dur = 0.12f;
+        while (t < dur && bullet != null)
+        {
+            t += Time.deltaTime;
+            bullet.transform.position = Vector3.Lerp(start, end, t / dur);
+            yield return null;
+        }
+        if (bullet != null) Destroy(bullet);
+
+        if (impactPrefab != null)
+            Instantiate(impactPrefab, end, Quaternion.identity);
+    }
+
+    // ─── ATAQUE BÁSICO ────────────────────────────────────────────────────────
     private void HandleAttackAnimationRequested(Unit attacker, Unit target, Action onImpact)
     {
         if (!_visualUnits.TryGetValue(attacker, out GameObject attObj) || attObj == null) return;
         if (!_visualUnits.TryGetValue(target, out GameObject defObj) || defObj == null) return;
 
-        // Mirar al objetivo
+        // Orientar hacia el objetivo
         Vector3 targetPos = defObj.transform.position;
         attObj.transform.LookAt(new Vector3(targetPos.x, attObj.transform.position.y, targetPos.z));
 
         UnitWorldUI ui = attObj.GetComponent<UnitWorldUI>();
         bool isRanged = ui != null && ui.shootPoint != null;
         float distance = Vector3.Distance(attObj.transform.position, targetPos);
-        float maxRangedDist = 4.5f;
 
         if (isRanged)
         {
-            if (distance > maxRangedDist)
-                StartCoroutine(AnimateWalkToRangeAndShoot(attObj, defObj, maxRangedDist, onImpact));
+            if (distance > 4.5f)
+                StartCoroutine(NavMeshWalkToRangeAndShoot(attacker, attObj, defObj, 4.5f, onImpact));
             else
                 StartCoroutine(AnimateProjectileWithImpact(attObj, defObj, onImpact));
         }
         else
         {
-            StartCoroutine(AnimateMeleeWalkAndStrike(attObj, defObj, onImpact));
+            StartCoroutine(NavMeshMeleeWalkAndStrike(attacker, attObj, defObj, onImpact));
         }
     }
 
-    // ─── SOL-9 DISRUPTION BARRAGE ─────────────────────────────────────────────
-    // Cada proyectil lleva su propio callback: el daño ocurre al llegar.
-    private void HandleSOL9ProjectileRequested(Unit caster, Unit target, int projectileIndex, Action onImpact)
-    {
-        if (!_visualUnits.TryGetValue(caster, out GameObject casterObj) || casterObj == null) return;
-        if (!_visualUnits.TryGetValue(target, out GameObject targetObj) || targetObj == null) return;
-
-        float delay = projectileIndex * 0.12f;
-        StartCoroutine(FireSOL9Projectile(casterObj, targetObj, target, delay, projectileIndex, onImpact));
-    }
-
-    private IEnumerator FireSOL9Projectile(
-        GameObject casterObj, GameObject targetObj, Unit targetData,
-        float initialDelay, int projectileIndex, Action onImpact)
-    {
-        yield return new WaitForSeconds(initialDelay);
-
-        if (casterObj == null || targetObj == null) yield break;
-
-        // Animación de disparo en el caster (solo en el primer proyectil para no spam)
-        if (projectileIndex == 0)
-        {
-            Animator casterAnim = casterObj.GetComponent<Animator>();
-            casterAnim?.SetTrigger(ANIM_ATACAR);
-        }
-
-
-        UnitWorldUI ui = casterObj.GetComponent<UnitWorldUI>();
-        Vector3 spawnPos = (ui != null && ui.shootPoint != null)
-                           ? ui.shootPoint.position
-                           : casterObj.transform.position + Vector3.up * 0.8f;
-
-        Vector3 targetPos = targetObj.transform.position + Vector3.up * 0.9f;
-        targetPos += new Vector3(
-            UnityEngine.Random.Range(-0.15f, 0.15f), 0,
-            UnityEngine.Random.Range(-0.15f, 0.15f));
-
-        GameObject bulletPrefab = prefabSollarBullet != null ? prefabSollarBullet : prefabVoidBullet;
-        if (bulletPrefab == null)
-        {
-            // Sin prefab aún: aplicamos el daño igualmente
-            onImpact?.Invoke();
-            yield break;
-        }
-
-        GameObject bullet = Instantiate(bulletPrefab, spawnPos, Quaternion.identity);
-        bullet.transform.LookAt(targetPos);
-
-        float travelTime = 0.10f;
-        float t = 0f;
-        while (t < travelTime && bullet != null)
-        {
-            t += Time.deltaTime;
-            bullet.transform.position = Vector3.Lerp(spawnPos, targetPos, t / travelTime);
-            yield return null;
-        }
-
-        if (bullet != null) Destroy(bullet);
-
-        // ── IMPACTO: aplicar daño ahora que la bala llegó ─────────────────────
-        onImpact?.Invoke();
-
-        if (targetObj != null)
-        {
-            // Partículas en el objetivo al recibir el golpe
-            PlayHitParticles(casterObj);
-
-            if (prefabForceImpact != null)
-                Instantiate(prefabForceImpact, targetObj.transform.position + Vector3.up * 0.9f, Quaternion.identity);
-
-            // Stagger FX en el segundo impacto (cuando projectileHitCount llega a 2)
-            if (projectileIndex == 1 && prefabStaggerFX != null && targetData.stunTimer > 0)
-                Instantiate(prefabStaggerFX, targetObj.transform.position + Vector3.up, Quaternion.identity);
-        }
-    }
-
-    // ─── ANIMACIÓN RANGED: caminar hasta rango y disparar ────────────────────
-    private IEnumerator AnimateWalkToRangeAndShoot(
-        GameObject attObj, GameObject defObj, float range, Action onImpact)
+    // ─── MOVIMIENTO MELEE CON NAVMESH ─────────────────────────────────────────
+    private IEnumerator NavMeshMeleeWalkAndStrike(
+        Unit attackerData, GameObject attObj, GameObject defObj, Action onImpact)
     {
         if (attObj == null || defObj == null) yield break;
 
+        NavMeshAgent agent = attObj.GetComponent<NavMeshAgent>();
         Animator anim = attObj.GetComponent<Animator>();
 
-        Vector3 enemyPos = defObj.transform.position;
-        Vector3 combatPos = enemyPos + (attObj.transform.position - enemyPos).normalized * range;
-        combatPos.y = attObj.transform.position.y;
-
-        // Caminar
-        anim?.SetFloat(ANIM_VELOCIDAD, 1f);
-
-        while (attObj != null && Vector3.Distance(attObj.transform.position, combatPos) > 0.1f)
+        if (agent == null)
         {
-            attObj.transform.position = Vector3.MoveTowards(
-                attObj.transform.position, combatPos, 8f * Time.deltaTime);
-            yield return null;
-        }
-        anim?.SetFloat(ANIM_VELOCIDAD, 0f);
-
-        if (attObj == null || defObj == null) yield break;
-
-        yield return StartCoroutine(AnimateProjectileWithImpact(attObj, defObj, onImpact));
-    }
-
-    // ─── PROYECTIL RANGED BÁSICO ──────────────────────────────────────────────
-    // El daño se aplica cuando el proyectil llega al destino.
-    private IEnumerator AnimateProjectileWithImpact(
-        GameObject attObj, GameObject defObj, Action onImpact)
-    {
-        if (attObj == null || defObj == null)
-        {
-            onImpact?.Invoke();
+            // Fallback sin NavMesh
+            yield return StartCoroutine(FallbackMeleeWalk(attObj, defObj, onImpact));
             yield break;
         }
-
-        // Disparar animación de ataque
-        Animator anim = attObj.GetComponent<Animator>();
-        anim?.SetFloat(ANIM_VELOCIDAD, 0f);
-        anim?.SetTrigger(ANIM_ATACAR);
-
-        UnitWorldUI ui = attObj.GetComponent<UnitWorldUI>();
-        Vector3 startPos = (ui != null && ui.shootPoint != null)
-                           ? ui.shootPoint.position
-                           : attObj.transform.position + Vector3.up * 0.8f;
-
-        Vector3 endPos = defObj.transform.position + Vector3.up;
-
-        GameObject bulletPrefab = prefabVoidBullet;
-        if (bulletPrefab == null)
-        {
-            onImpact?.Invoke();
-            yield break;
-        }
-
-        GameObject bullet = Instantiate(bulletPrefab, startPos, Quaternion.identity);
-        bullet.transform.LookAt(endPos);
-
-        float travelTime = 0.15f;
-        float t = 0f;
-        while (t < travelTime && bullet != null)
-        {
-            t += Time.deltaTime;
-            bullet.transform.position = Vector3.Lerp(startPos, endPos, t / travelTime);
-            yield return null;
-        }
-
-        if (bullet != null) Destroy(bullet);
-
-        // ── IMPACTO ───────────────────────────────────────────────────────────
-        onImpact?.Invoke();
-
-        if (defObj != null)
-        {
-            // Partículas en el objetivo
-            PlayHitParticles(defObj);
-
-            if (prefabForceImpact != null)
-                Instantiate(prefabForceImpact, defObj.transform.position + Vector3.up, Quaternion.identity);
-        }
-    }
-
-    // ─── ANIMACIÓN MELEE: acercarse y golpear ─────────────────────────────────
-    // El daño se aplica en el fotograma del "strike" (extensión del brazo).
-    private IEnumerator AnimateMeleeWalkAndStrike(
-        GameObject attObj, GameObject defObj, Action onImpact)
-    {
-        if (attObj == null || defObj == null) yield break;
-        Animator anim = attObj.GetComponent<Animator>();
 
         Vector3 enemyPos = defObj.transform.position;
         Vector3 combatPos = enemyPos + (attObj.transform.position - enemyPos).normalized * 1.2f;
         combatPos.y = attObj.transform.position.y;
 
-        // Caminar hacia el objetivo
+        // Navegar hacia la posición de combate
+        agent.isStopped = false;
+        agent.SetDestination(combatPos);
         anim?.SetFloat(ANIM_VELOCIDAD, 1f);
-        while (attObj != null && Vector3.Distance(attObj.transform.position, combatPos) > 0.1f)
+
+        while (attObj != null && !agent.pathPending
+               && agent.remainingDistance > agent.stoppingDistance + 0.05f)
         {
-            attObj.transform.position = Vector3.MoveTowards(
-                attObj.transform.position, combatPos, 8f * Time.deltaTime);
+            // Sync speed con el estado lógico (puede haber slow activo)
+            agent.speed = attackerData.FinalSpeed * 3f;
             yield return null;
         }
+
+        agent.isStopped = true;
         anim?.SetFloat(ANIM_VELOCIDAD, 0f);
 
         if (attObj == null || defObj == null) yield break;
 
-        // Disparar animación de ataque (justo antes del lunge)
-        int variacion = UnityEngine.Random.Range(0, 2); // El 2 es exclusivo, devuelve 0 o 1
-        anim.SetInteger(ANIM_NUM_ATAQUE, variacion);
+        // Animación de golpe
+        int variacion = UnityEngine.Random.Range(0, 2);
+        anim?.SetInteger(ANIM_NUM_ATAQUE, variacion);
         anim?.SetTrigger(ANIM_ATACAR);
 
-        // Pequeño delay para que la animación se vea antes del impacto
         yield return new WaitForSeconds(0.2f);
-
         if (attObj == null || defObj == null) yield break;
 
-        // Extender el golpe hacia el objetivo
+        // Micro-lunge
         Vector3 strikePos = combatPos + (enemyPos - combatPos).normalized * 0.4f;
         float t = 0f;
         while (t < 0.08f && attObj != null)
@@ -403,43 +487,208 @@ public class VisualController : MonoBehaviour
             yield return null;
         }
 
-        // ── IMPACTO: el puño llegó al objetivo ────────────────────────────────
+        // ── IMPACTO ───────────────────────────────────────────────────────────
         onImpact?.Invoke();
+        PlayHitParticles(defObj);
 
-        if (defObj != null)
-        {
-            // Partículas en el objetivo
-            PlayHitParticles(defObj);
-
-            if (prefabForceImpact != null)
-                Instantiate(prefabForceImpact, defObj.transform.position + Vector3.up * 0.5f, Quaternion.identity);
-        }
-
-        // Retirar el brazo
         if (attObj != null) attObj.transform.position = combatPos;
     }
 
+    // ─── MOVIMIENTO RANGED CON NAVMESH ────────────────────────────────────────
+    private IEnumerator NavMeshWalkToRangeAndShoot(
+        Unit attackerData, GameObject attObj, GameObject defObj, float range, Action onImpact)
+    {
+        if (attObj == null || defObj == null) yield break;
 
+        NavMeshAgent agent = attObj.GetComponent<NavMeshAgent>();
+        Animator anim = attObj.GetComponent<Animator>();
 
+        if (agent == null)
+        {
+            yield return StartCoroutine(FallbackRangedWalk(attObj, defObj, range, onImpact));
+            yield break;
+        }
 
+        Vector3 enemyPos = defObj.transform.position;
+        Vector3 combatPos = enemyPos + (attObj.transform.position - enemyPos).normalized * range;
+        combatPos.y = attObj.transform.position.y;
 
+        agent.isStopped = false;
+        agent.SetDestination(combatPos);
+        anim?.SetFloat(ANIM_VELOCIDAD, 1f);
+
+        while (attObj != null && !agent.pathPending
+               && agent.remainingDistance > agent.stoppingDistance + 0.05f)
+        {
+            agent.speed = attackerData.FinalSpeed * 3f;
+            yield return null;
+        }
+
+        agent.isStopped = true;
+        anim?.SetFloat(ANIM_VELOCIDAD, 0f);
+
+        if (attObj == null || defObj == null) yield break;
+        yield return StartCoroutine(AnimateProjectileWithImpact(attObj, defObj, onImpact));
+    }
+
+    // ─── PROYECTIL RANGED ─────────────────────────────────────────────────────
+    private IEnumerator AnimateProjectileWithImpact(
+        GameObject attObj, GameObject defObj, Action onImpact)
+    {
+        if (attObj == null || defObj == null) { onImpact?.Invoke(); yield break; }
+
+        Animator anim = attObj.GetComponent<Animator>();
+        anim?.SetFloat(ANIM_VELOCIDAD, 0f);
+        anim?.SetTrigger(ANIM_ATACAR);
+
+        UnitWorldUI ui = attObj.GetComponent<UnitWorldUI>();
+        Vector3 startPos = (ui != null && ui.shootPoint != null)
+                           ? ui.shootPoint.position
+                           : attObj.transform.position + Vector3.up * 0.8f;
+        Vector3 endPos = defObj.transform.position + Vector3.up;
+
+        GameObject bullet = prefabVoidBullet != null
+            ? Instantiate(prefabVoidBullet, startPos, Quaternion.identity) : null;
+        if (bullet != null) bullet.transform.LookAt(endPos);
+
+        float t = 0f, dur = 0.15f;
+        while (t < dur && bullet != null)
+        {
+            t += Time.deltaTime;
+            bullet.transform.position = Vector3.Lerp(startPos, endPos, t / dur);
+            yield return null;
+        }
+        if (bullet != null) Destroy(bullet);
+
+        onImpact?.Invoke();
+        if (defObj != null) PlayHitParticles(defObj);
+    }
+
+    // ─── SOL-9 DISRUPTION BARRAGE ─────────────────────────────────────────────
+    private void HandleSOL9ProjectileRequested(Unit caster, Unit target, int projIndex, Action onImpact)
+    {
+        if (!_visualUnits.TryGetValue(caster, out GameObject casterObj) || casterObj == null) return;
+        if (!_visualUnits.TryGetValue(target, out GameObject targetObj) || targetObj == null) return;
+
+        StartCoroutine(FireSOL9Projectile(casterObj, targetObj, target, projIndex * 0.12f, projIndex, onImpact));
+    }
+
+    private IEnumerator FireSOL9Projectile(
+        GameObject casterObj, GameObject targetObj, Unit targetData,
+        float delay, int projIndex, Action onImpact)
+    {
+        yield return new WaitForSeconds(delay);
+        if (casterObj == null || targetObj == null) yield break;
+
+        if (projIndex == 0)
+            casterObj.GetComponent<Animator>()?.SetTrigger(ANIM_ATACAR);
+
+        UnitWorldUI ui = casterObj.GetComponent<UnitWorldUI>();
+        Vector3 startPos = (ui != null && ui.shootPoint != null)
+                           ? ui.shootPoint.position
+                           : casterObj.transform.position + Vector3.up * 0.8f;
+
+        Vector3 endPos = targetObj.transform.position + Vector3.up * 0.9f
+                       + new Vector3(UnityEngine.Random.Range(-0.15f, 0.15f), 0,
+                                     UnityEngine.Random.Range(-0.15f, 0.15f));
+
+        GameObject bulletPrefab = prefabSollarBullet != null ? prefabSollarBullet : prefabVoidBullet;
+        if (bulletPrefab == null) { onImpact?.Invoke(); yield break; }
+
+        GameObject bullet = Instantiate(bulletPrefab, startPos, Quaternion.identity);
+        bullet.transform.LookAt(endPos);
+
+        float t = 0f, dur = 0.10f;
+        while (t < dur && bullet != null)
+        {
+            t += Time.deltaTime;
+            bullet.transform.position = Vector3.Lerp(startPos, endPos, t / dur);
+            yield return null;
+        }
+        if (bullet != null) Destroy(bullet);
+
+        // ── IMPACTO ───────────────────────────────────────────────────────────
+        onImpact?.Invoke();
+
+        if (targetObj != null)
+        {
+            PlayHitParticles(targetObj);
+            // Stagger FX en el segundo proyectil (cuando se activa)
+            if (projIndex == 1 && prefabStaggerFX != null && targetData.stunTimer > 0)
+                Instantiate(prefabStaggerFX, targetObj.transform.position + Vector3.up, Quaternion.identity);
+        }
+    }
+
+    // ─── SKILL CAST ───────────────────────────────────────────────────────────
+    private void HandleUnitSkillCast(Unit caster, CardID skillId)
+    {
+        if (!_visualUnits.TryGetValue(caster, out GameObject casterObj) || casterObj == null) return;
+
+        Animator anim = casterObj.GetComponent<Animator>();
+        anim?.SetTrigger(ANIM_ATACAR);
+
+        switch (skillId)
+        {
+            case CardID.SollarDuelist: StartCoroutine(AnimateSpin(casterObj.transform)); break;
+            case CardID.VoidHeavyShooter: StartCoroutine(AnimateShake(casterObj.transform)); break;
+            default: StartCoroutine(AnimatePulse(casterObj.transform)); break;
+        }
+    }
+
+    // ─── FALLBACKS SIN NAVMESH ────────────────────────────────────────────────
+    private IEnumerator FallbackMeleeWalk(GameObject attObj, GameObject defObj, Action onImpact)
+    {
+        Vector3 enemyPos = defObj.transform.position;
+        Vector3 combatPos = enemyPos + (attObj.transform.position - enemyPos).normalized * 1.2f;
+        combatPos.y = attObj.transform.position.y;
+
+        while (attObj != null && Vector3.Distance(attObj.transform.position, combatPos) > 0.1f)
+        {
+            attObj.transform.position = Vector3.MoveTowards(attObj.transform.position, combatPos, 8f * Time.deltaTime);
+            yield return null;
+        }
+        if (attObj == null || defObj == null) yield break;
+
+        attObj.GetComponent<Animator>()?.SetTrigger(ANIM_ATACAR);
+        yield return new WaitForSeconds(0.2f);
+
+        Vector3 strikePos = combatPos + (enemyPos - combatPos).normalized * 0.4f;
+        float t = 0f;
+        while (t < 0.08f && attObj != null)
+        {
+            t += Time.deltaTime;
+            attObj.transform.position = Vector3.Lerp(combatPos, strikePos, t / 0.08f);
+            yield return null;
+        }
+        onImpact?.Invoke();
+        PlayHitParticles(defObj);
+        if (attObj != null) attObj.transform.position = combatPos;
+    }
+
+    private IEnumerator FallbackRangedWalk(
+        GameObject attObj, GameObject defObj, float range, Action onImpact)
+    {
+        Vector3 enemyPos = defObj.transform.position;
+        Vector3 combatPos = enemyPos + (attObj.transform.position - enemyPos).normalized * range;
+        combatPos.y = attObj.transform.position.y;
+
+        while (attObj != null && Vector3.Distance(attObj.transform.position, combatPos) > 0.1f)
+        {
+            attObj.transform.position = Vector3.MoveTowards(attObj.transform.position, combatPos, 8f * Time.deltaTime);
+            yield return null;
+        }
+        if (attObj == null || defObj == null) yield break;
+        yield return StartCoroutine(AnimateProjectileWithImpact(attObj, defObj, onImpact));
+    }
 
     // ─── PARTÍCULAS DE GOLPE ──────────────────────────────────────────────────
-    /// <summary>
-    /// Activa el sistema de partículas del personaje objetivo y lo apaga
-    /// automáticamente después de <see cref="hitParticlesDuration"/> segundos.
-    /// El ParticleSystem debe estar en el prefab del personaje (puede ser un hijo).
-    /// </summary>
     private void PlayHitParticles(GameObject targetObj)
     {
-        ParticleSystem[] allPS = targetObj.GetComponentsInChildren<ParticleSystem>(true);
-
-        foreach (ParticleSystem ps in allPS)
+        if (targetObj == null) return;
+        foreach (ParticleSystem ps in targetObj.GetComponentsInChildren<ParticleSystem>(true))
         {
             if (ps.CompareTag("WeaponVFX")) continue;
-
             ps.Play();
-            // ¡Activa esta línea para obligar a las partículas a detenerse!
             StartCoroutine(StopParticlesAfterDelay(ps, hitParticlesDuration));
         }
     }
@@ -450,30 +699,6 @@ public class VisualController : MonoBehaviour
         if (ps != null) ps.Stop(true, ParticleSystemStopBehavior.StopEmitting);
     }
 
-
-
-
-
-
-
-    // ─── SKILL CAST (animaciones del caster) ──────────────────────────────────
-    private void HandleUnitSkillCast(Unit caster, CardID skillId)
-    {
-        if (!_visualUnits.TryGetValue(caster, out GameObject casterObj) || casterObj == null) return;
-
-        // Siempre disparar la animación de ataque en el skill
-        Animator anim = casterObj.GetComponent<Animator>();
-        anim?.SetTrigger(ANIM_ATACAR);
-
-        switch (skillId)
-        {
-            case CardID.SollarDuelist: StartCoroutine(AnimateSpin(casterObj.transform)); break;
-            case CardID.VoidHeavyShooter: StartCoroutine(AnimateShake(casterObj.transform)); break;
-            case CardID.SollarForce: StartCoroutine(AnimatePulse(casterObj.transform)); break;
-            default: StartCoroutine(AnimatePulse(casterObj.transform)); break;
-        }
-    }
-
     // ─── ANIMACIONES DE SOPORTE ───────────────────────────────────────────────
     private IEnumerator AnimateSpin(Transform t)
     {
@@ -482,8 +707,7 @@ public class VisualController : MonoBehaviour
         while (timer < 0.4f && t != null)
         {
             timer += Time.deltaTime;
-            t.eulerAngles = new Vector3(startRot.x,
-                startRot.y + Mathf.Lerp(0, 360, timer / 0.4f), startRot.z);
+            t.eulerAngles = new Vector3(startRot.x, startRot.y + Mathf.Lerp(0, 360, timer / 0.4f), startRot.z);
             yield return null;
         }
     }
@@ -492,19 +716,9 @@ public class VisualController : MonoBehaviour
     {
         Vector3 orig = t.localScale;
         float timer = 0f;
-        while (timer < 0.2f && t != null)
-        {
-            timer += Time.deltaTime;
-            t.localScale = Vector3.Lerp(orig, orig * 1.5f, timer / 0.2f);
-            yield return null;
-        }
+        while (timer < 0.2f && t != null) { timer += Time.deltaTime; t.localScale = Vector3.Lerp(orig, orig * 1.5f, timer / 0.2f); yield return null; }
         timer = 0f;
-        while (timer < 0.2f && t != null)
-        {
-            timer += Time.deltaTime;
-            t.localScale = Vector3.Lerp(orig * 1.5f, orig, timer / 0.2f);
-            yield return null;
-        }
+        while (timer < 0.2f && t != null) { timer += Time.deltaTime; t.localScale = Vector3.Lerp(orig * 1.5f, orig, timer / 0.2f); yield return null; }
     }
 
     private IEnumerator AnimateShake(Transform t)
@@ -514,9 +728,7 @@ public class VisualController : MonoBehaviour
         while (timer < 0.5f && t != null)
         {
             timer += Time.deltaTime;
-            t.position = orig + new Vector3(
-                UnityEngine.Random.Range(-0.2f, 0.2f), 0,
-                UnityEngine.Random.Range(-0.2f, 0.2f));
+            t.position = orig + new Vector3(UnityEngine.Random.Range(-0.2f, 0.2f), 0, UnityEngine.Random.Range(-0.2f, 0.2f));
             yield return null;
         }
         if (t != null) t.position = orig;

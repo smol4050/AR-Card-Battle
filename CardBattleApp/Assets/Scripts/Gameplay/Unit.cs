@@ -10,54 +10,62 @@ public class Unit
 
     public float maxHp, currentHp;
     public float baseAtk, baseDef, baseSpeed;
-    public float bonusAtk, bonusDef, bonusSpeed, damageMultiplier, damageTakenMultiplier;
+    public float bonusAtk, bonusDef, bonusSpeed;
+    public float damageMultiplier, damageTakenMultiplier;
 
-    // ─── SISTEMA GLOBAL DE EFECTOS ───────────────────────────────────────────
+    // ─── Efectos globales ─────────────────────────────────────────────────────
     public float baseLifesteal;
-    public float baseRegen;      // decimal: 0.01 = 1% HP/s
-    public float healingPower;   // amplificador de curación recibida
+    public float baseRegen;      // 0.01 = 1 % HP/s
+    public float healingPower;   // multiplicador de curación recibida
 
-    // ─── TEMPORIZADORES DE BUFFS Y DEBUFFS ───────────────────────────────────
+    // ─── Timers de estado ────────────────────────────────────────────────────
     public float antiHealTimer;
     public float vulnerabilityTimer;
     public float commanderBuffTimer;
     public float duelistRegenBuffTimer;
     public float stunTimer;
-
-    // 🔴 NUEVO — Micro-Slow (SOL-9 Rework)
-    // Reduce FinalSpeed en un porcentaje mientras el timer sea > 0
     public float slowTimer;
-    public float slowPercent;   // ej. 0.10 = -10% speed
+    public float slowPercent;        // 0.10 = −10 % speed
 
-    // 🔴 NUEVO — Contador de impactos de proyectil en el tick de skill actual
-    // Se usa para activar Stagger si ≥ 2 proyectiles conectan al mismo target
+    // ─── Ship buffs (aplicados por aura mientras la nave aliada esté activa) ──
+    public float shipAtkBonus;       // bonus flat de ATK por la nave
+    public float shipSpeedBonus;     // bonus flat de Speed por la nave
+    // Burn (Solar Vanguard): daño por segundo
+    public float burnTimer;
+    public float burnDps;
+    // Void ship debuffs sobre esta unidad
+    public float voidAntiHealTimer;  // reduce healing recibido 60 %
+    public float voidDefDebuffTimer; // reduce DEF 10 %
+    public float voidSlowTimer;      // −15 % speed
+
+    // ─── Contador de proyectiles (SOL-9 Stagger) ──────────────────────────────
     public int projectileHitCount;
 
-    // ─── COMBATE ─────────────────────────────────────────────────────────────
+    // ─── Combate ──────────────────────────────────────────────────────────────
     public float attackProgress;
     public float skillCooldown, currentSkillTimer;
-    public float passiveTimer;
 
     public Vector2 logicalPosition;
 
-    // ─── PROPIEDADES ─────────────────────────────────────────────────────────
+    // ─── Propiedades ──────────────────────────────────────────────────────────
     public bool IsDead => currentHp <= 0;
 
-    public float FinalAtk => Mathf.Max(0, baseAtk + bonusAtk);
-    public float FinalDef => Mathf.Max(0, baseDef + bonusDef);
+    public float FinalAtk => Mathf.Max(0, baseAtk + bonusAtk + shipAtkBonus);
+    public float FinalDef => Mathf.Max(0,
+        baseDef + bonusDef - (voidDefDebuffTimer > 0 ? baseDef * 0.10f : 0f));
 
-    // FinalSpeed aplica slow si el timer sigue activo
     public float FinalSpeed
     {
         get
         {
-            float s = baseSpeed + bonusSpeed;
+            float s = baseSpeed + bonusSpeed + shipSpeedBonus;
             if (slowTimer > 0) s *= (1f - slowPercent);
+            if (voidSlowTimer > 0) s *= 0.85f;   // −15 % de la nave Void
             return Mathf.Max(0.1f, s);
         }
     }
 
-    // ─── CONSTRUCTOR ─────────────────────────────────────────────────────────
+    // ─── Constructor ─────────────────────────────────────────────────────────
     public Unit(int ownerId, CardID cardId, int row, int slotIndex,
                 float hp, float atk, float def, float speed, Vector2 spawnPos,
                 float lifesteal = 0f, float regen = 0f, float healPower = 0f)
@@ -66,46 +74,38 @@ public class Unit
         this.cardId = cardId;
         this.row = row;
         this.slotIndex = slotIndex;
-        this.maxHp = hp;
-        this.currentHp = hp;
-        this.baseAtk = atk;
-        this.baseDef = def;
-        this.baseSpeed = speed;
-        this.logicalPosition = spawnPos;
+        maxHp = currentHp = hp;
+        baseAtk = atk;
+        baseDef = def;
+        baseSpeed = speed;
+        logicalPosition = spawnPos;
 
-        this.baseLifesteal = lifesteal;
-        this.baseRegen = regen;
-        this.healingPower = healPower;
+        baseLifesteal = lifesteal;
+        baseRegen = regen;
+        healingPower = healPower;
 
-        this.damageMultiplier = 1f;
-        this.damageTakenMultiplier = 1f;
-        this.attackProgress = 0f;
-        this.currentSkillTimer = 0f;
-        this.passiveTimer = 0f;
-
-        this.antiHealTimer = 0f;
-        this.vulnerabilityTimer = 0f;
-        this.commanderBuffTimer = 0f;
-        this.duelistRegenBuffTimer = 0f;
-        this.stunTimer = 0f;
-        this.slowTimer = 0f;
-        this.slowPercent = 0f;
-        this.projectileHitCount = 0;
+        damageMultiplier = 1f;
+        damageTakenMultiplier = 1f;
     }
 
-    // ─── DAÑO ────────────────────────────────────────────────────────────────
+    // ─── Daño ─────────────────────────────────────────────────────────────────
     public void TakeDamage(float amount)
     {
         currentHp -= amount;
     }
 
-    // ─── CURACIÓN (Anti-Heal + HealingPower) ─────────────────────────────────
+    // ─── Curación (Anti-Heal + HealingPower) ──────────────────────────────────
     public void Heal(float amount)
     {
         if (IsDead) return;
 
         float finalHeal = amount * (1f + healingPower);
-        if (antiHealTimer > 0) finalHeal *= 0.5f;   // 🔴 Anti-Heal 50%
+
+        // Anti-heal: el más severo gana (no acumulan)
+        float antiHealMult = 1f;
+        if (antiHealTimer > 0) antiHealMult = Mathf.Min(antiHealMult, 0.50f);
+        if (voidAntiHealTimer > 0) antiHealMult = Mathf.Min(antiHealMult, 0.40f); // −60 %
+        finalHeal *= antiHealMult;
 
         currentHp = Mathf.Min(maxHp, currentHp + finalHeal);
     }

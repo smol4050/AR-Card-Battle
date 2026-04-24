@@ -9,16 +9,16 @@ public class TutorialAIController : MonoBehaviour
     [SerializeField] private GameManager gameManager;
     public AIDifficulty currentDifficulty = AIDifficulty.Superior;
 
-    [Header("Configuración de Facción de la IA")]
+    [Header("Cartas disponibles para la IA")]
     public List<CardID> availableCards;
 
-    [Header("Zonas de Despliegue")]
+    [Header("Slots de despliegue")]
     public Transform[] frontSlots = new Transform[3];
     public Transform[] backSlots = new Transform[3];
 
     private List<AISlotDecision> _currentDecisions = new List<AISlotDecision>();
     private List<CardID> _enemyDraftSeen = new List<CardID>();
-    private bool _isActive = false;
+    private bool _isActive;
 
     public void ActivateAI()
     {
@@ -46,19 +46,17 @@ public class TutorialAIController : MonoBehaviour
         _currentDecisions.Clear();
         _enemyDraftSeen.Clear();
 
-        // La IA siempre juega con el Jugador 1 (Index 1)
+        // Les damos 10 de energía como solicitaste
+        gameManager.players[1].energy = 10;
         int energy = gameManager.players[1].energy;
 
-        // 1. Escaneo de amenazas (qué tiene el jugador 0 en el tablero)
-        foreach (Unit enemyUnit in gameManager.activeUnits[0])
-            if (!enemyUnit.IsDead) _enemyDraftSeen.Add(enemyUnit.cardId);
+        foreach (Unit u in gameManager.activeUnits[0])
+            if (!u.IsDead) _enemyDraftSeen.Add(u.cardId);
 
-        // 2. Adaptación — consulta la memoria de Mahoraga
         List<AISlotDecision> bestStrategy = null;
         if (currentDifficulty == AIDifficulty.Superior)
             bestStrategy = AIDataBank.GetBestCounterStrategy(_enemyDraftSeen);
 
-        // 3. Despliegue de contramedida
         if (bestStrategy != null)
         {
             foreach (var decision in bestStrategy)
@@ -69,63 +67,63 @@ public class TutorialAIController : MonoBehaviour
             }
         }
 
-        // 4. Improvisación si sobra energía o no hay datos previos
-        while (energy > 0 && _currentDecisions.Count < 6)
+        // BUCLE CORREGIDO: Evitamos que haga "break" si falla un slot.
+        int failsafe = 0; // Para evitar bucles infinitos si el tablero se llena
+        while (energy > 0 && _currentDecisions.Count < 6 && failsafe < 20)
         {
-            CardID nextCard = DecideNextCardFromDeck();
-            int bestSlot = FindBestSlotForRole(nextCard);
+            CardID next = DecideNextCard();
+            int slot = FindBestSlot(next);
 
-            if (bestSlot != -1 && PlaceUnit(nextCard, bestSlot)) energy--;
-            else break;
+            if (slot == -1 || !PlaceUnit(next, slot))
+            {
+                failsafe++;
+                continue; // En lugar de break, intentamos con otra carta/slot
+            }
+
+            energy -= (next == CardID.SollarForce) ? 2 : 1;
+            failsafe++;
         }
 
         gameManager.SetPlayerReady(1);
     }
 
-    private CardID DecideNextCardFromDeck()
+    private CardID DecideNextCard()
     {
         if (availableCards == null || availableCards.Count == 0) return CardID.VoidHorde;
 
         bool hasCommander = _currentDecisions.Exists(
             d => d.cardId == CardID.VoidCommander || d.cardId == CardID.SollarCommander);
 
-        // A. Sinergia de Ejecución (Heavy Shooter necesita debuffers)
-        bool hasShooter = _currentDecisions.Exists(d => d.cardId == CardID.VoidHeavyShooter);
-        if (hasShooter)
+        // Sinergia: Heavy Shooter necesita debuffers
+        if (_currentDecisions.Exists(d => d.cardId == CardID.VoidHeavyShooter))
         {
             CardID debuffer = availableCards.FirstOrDefault(
                 c => c == CardID.VoidCommander || c == CardID.SollarForce);
             if (debuffer != CardID.None && Random.value > 0.5f) return debuffer;
         }
 
-        // B. Contramedida de Sustain (Anti-Heal si el enemigo tiene Duelists)
-        bool enemyHasSustain = _enemyDraftSeen.Contains(CardID.SollarDuelist);
-        if (enemyHasSustain && currentDifficulty == AIDifficulty.Superior)
-        {
+        // Counter: Anti-Heal vs Sustain enemigo
+        if (_enemyDraftSeen.Contains(CardID.SollarDuelist) && currentDifficulty == AIDifficulty.Superior)
             if (availableCards.Contains(CardID.SollarForce) && Random.value > 0.7f)
                 return CardID.SollarForce;
-        }
 
-        // C. Restricción de Comandante (máximo 1)
-        List<CardID> safeDeck = new List<CardID>(availableCards);
+        // Restricción Commander
+        List<CardID> deck = new List<CardID>(availableCards);
+        // Excluir naves de la fase de preparación (se juegan en combate)
+        deck.RemoveAll(c => c == CardID.SolarVanguard || c == CardID.AbyssReaper);
         if (hasCommander)
-            safeDeck.RemoveAll(c => c == CardID.VoidCommander || c == CardID.SollarCommander);
+            deck.RemoveAll(c => c == CardID.VoidCommander || c == CardID.SollarCommander);
 
-        if (safeDeck.Count == 0) return availableCards[0];
-        return safeDeck[Random.Range(0, safeDeck.Count)];
+        if (deck.Count == 0) return availableCards[0];
+        return deck[Random.Range(0, deck.Count)];
     }
 
-    private int FindBestSlotForRole(CardID card)
+    private int FindBestSlot(CardID card)
     {
-        // Frontline (row 0, slots 0-2): bruisers y tanques
-        // Backline  (row 1, slots 3-5): ranged y supports
         bool isFrontline = card == CardID.VoidHorde
                         || card == CardID.SollarDuelist
                         || card == CardID.SollarCommander
                         || card == CardID.VoidCommander;
-
-        // SollarForce (SOL-9) y VoidHeavyShooter son Ranged → backline
-        // (si no están en la lista de frontline, van a backline por defecto)
 
         int start = isFrontline ? 0 : 3;
         int end = isFrontline ? 3 : 6;
@@ -133,7 +131,6 @@ public class TutorialAIController : MonoBehaviour
         for (int i = start; i < end; i++)
             if (!_currentDecisions.Exists(d => d.slotIndex == i)) return i;
 
-        // Fallback: cualquier slot libre
         for (int i = 0; i < 6; i++)
             if (!_currentDecisions.Exists(d => d.slotIndex == i)) return i;
 
@@ -145,31 +142,23 @@ public class TutorialAIController : MonoBehaviour
         int row = (slot < 3) ? 0 : 1;
         Transform t = (slot < 3) ? frontSlots[slot] : backSlots[slot - 3];
 
-        Vector2 pos;
         BoxCollider box = t.GetComponent<BoxCollider>();
-        if (box != null)
-            pos = new Vector2(t.localPosition.x + box.center.x, t.localPosition.z + box.center.z);
-        else
-            pos = new Vector2(t.localPosition.x, t.localPosition.z);
+        Vector2 pos = box != null
+            ? new Vector2(t.localPosition.x + box.center.x, t.localPosition.z + box.center.z)
+            : new Vector2(t.localPosition.x, t.localPosition.z);
 
-        // SOL-9 tiene cost:2 en diseño; se pasa directamente
         int cost = (card == CardID.SollarForce) ? 2 : 1;
 
-        if (gameManager.PlayCard(1, card, pos, row, slot, cost))
-        {
-            _currentDecisions.Add(new AISlotDecision { cardId = card, slotIndex = slot });
-            return true;
-        }
-        return false;
+        if (!gameManager.PlayCard(1, card, pos, row, slot, cost)) return false;
+        _currentDecisions.Add(new AISlotDecision { cardId = card, slotIndex = slot });
+        return true;
     }
 
     private void EvaluateResult()
     {
         if (_currentDecisions.Count == 0) return;
-
         bool aiWon = gameManager.players[0].hp <= 0 || gameManager.activeUnits[0].Count == 0;
         AIDataBank.RecordBattleResult(_enemyDraftSeen, _currentDecisions, aiWon);
-        Debug.Log($"<color=lime>Mahoraga: Ciclo de aprendizaje completado. " +
-                  $"Resultado: {(aiWon ? "Victoria" : "Derrota")}.</color>");
+        Debug.Log($"<color=lime>Mahoraga: {(aiWon ? "Victoria" : "Derrota")}.</color>");
     }
 }
