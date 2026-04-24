@@ -17,7 +17,7 @@ public class GameManager : MonoBehaviour
     public event Action<RoundPhase> OnPhaseChanged;
     public event Action<int, bool> OnPlayerReadyStatusChanged;
     public event Action<int, string> OnLogMessage;
-    public event Action<Unit, Unit, string> OnVisualEffectRequested; // NUEVO EVENTO VFX
+    public event Action<Unit, Unit, string> OnVisualEffectRequested;
 
     public void InitializeGame()
     {
@@ -36,7 +36,7 @@ public class GameManager : MonoBehaviour
         players[0].StartTurn();
         players[1].StartTurn();
         OnPhaseChanged?.Invoke(currentPhase);
-        LogMessage(-1, "Preparation Phase started. Deploy units.");
+        LogMessage(-1, "<color=yellow>Fase de Preparación: Despliega tus tropas.</color>");
     }
 
     private void Update()
@@ -50,29 +50,25 @@ public class GameManager : MonoBehaviour
     public void SetPlayerReady(int playerId)
     {
         if (currentPhase != RoundPhase.Preparation) return;
-
         isPlayerReady[playerId] = true;
         OnPlayerReadyStatusChanged?.Invoke(playerId, true);
-        LogMessage(playerId, $"Player {playerId} is Ready.");
 
         if (isPlayerReady[0] && isPlayerReady[1])
         {
             currentPhase = RoundPhase.Combat;
             OnPhaseChanged?.Invoke(currentPhase);
-            LogMessage(-1, "Combat Phase executing (Tick-based Simulation)...");
+            LogMessage(-1, "<color=red>¡QUE COMIENCE LA BATALLA!</color>");
         }
     }
 
     public bool PlayCard(int playerId, CardID cardId, Vector2 dummyPos, int row, int slotIndex, int cost = 1)
     {
         if (currentPhase != RoundPhase.Preparation) return false;
+        if (activeUnits[playerId].Exists(u => u.slotIndex == slotIndex && !u.IsDead)) return false;
 
-        // Validación de Casilla Única
-        if (activeUnits[playerId].Exists(u => u.slotIndex == slotIndex && !u.IsDead))
-        {
-            LogMessage(playerId, $"Slot {slotIndex} is already occupied!");
+        bool isCommanderCard = cardId == CardID.SollarCommander || cardId == CardID.VoidCommander;
+        if (isCommanderCard && activeUnits[playerId].Exists(u => (u.cardId == CardID.SollarCommander || u.cardId == CardID.VoidCommander) && !u.IsDead))
             return false;
-        }
 
         if (!players[playerId].ConsumeEnergy(cost)) return false;
 
@@ -80,35 +76,32 @@ public class GameManager : MonoBehaviour
 
         for (int i = 0; i < spawnCount; i++)
         {
-            Vector2 initialLogicalPos = Vector2.zero; // El visual controller aplicará la real
+            Vector2 initialLogicalPos = Vector2.zero;
             Unit newUnit = null;
 
             switch (cardId)
             {
-                // --- SOLLAR ALLIANCE ---
                 case CardID.SollarDuelist:
-                    newUnit = new Unit(playerId, cardId, row, slotIndex, 180f, 38f, 40f, 0.95f, initialLogicalPos);
-                    newUnit.skillCooldown = 4.5f; // BUFF
-                    break;
-                case CardID.SollarForce:
-                    newUnit = new Unit(playerId, cardId, row, slotIndex, 170f, 20f, 35f, 0.85f, initialLogicalPos); // BUFF
+                    newUnit = new Unit(playerId, cardId, row, slotIndex, 260f, 38f, 55f, 0.95f, initialLogicalPos, lifesteal: 0.10f, regen: 0.01f);
                     newUnit.skillCooldown = 5f;
                     break;
                 case CardID.SollarCommander:
-                    newUnit = new Unit(playerId, cardId, row, slotIndex, 160f, 28f, 35f, 0.85f, initialLogicalPos);
+                    newUnit = new Unit(playerId, cardId, row, slotIndex, 320f, 25f, 70f, 0.80f, initialLogicalPos, regen: 0.02f, healPower: 0.25f);
                     newUnit.skillCooldown = 8f;
                     break;
-
-                // --- VOID DOMINION ---
+                case CardID.SollarForce:
+                    newUnit = new Unit(playerId, cardId, row, slotIndex, 110f, 60f, 20f, 1.15f, initialLogicalPos);
+                    newUnit.skillCooldown = 5f;
+                    break;
                 case CardID.VoidHorde:
-                    newUnit = new Unit(playerId, cardId, row, slotIndex, 75f, 22f, 10f, 1.25f, initialLogicalPos);
+                    newUnit = new Unit(playerId, cardId, row, slotIndex, 70f, 20f, 10f, 1.30f, initialLogicalPos, lifesteal: 0.15f);
                     break;
                 case CardID.VoidCommander:
-                    newUnit = new Unit(playerId, cardId, row, slotIndex, 180f, 30f, 30f, 0.9f, initialLogicalPos);
+                    newUnit = new Unit(playerId, cardId, row, slotIndex, 190f, 28f, 35f, 0.95f, initialLogicalPos, lifesteal: 0.08f);
                     newUnit.skillCooldown = 7f;
                     break;
                 case CardID.VoidHeavyShooter:
-                    newUnit = new Unit(playerId, cardId, row, slotIndex, 120f, 60f, 20f, 1.0f, initialLogicalPos);
+                    newUnit = new Unit(playerId, cardId, row, slotIndex, 115f, 65f, 18f, 1.05f, initialLogicalPos, lifesteal: 0.12f);
                     newUnit.skillCooldown = 6f;
                     break;
             }
@@ -129,8 +122,12 @@ public class GameManager : MonoBehaviour
         UpdateAurasAndPassives();
         ProcessTeamTicks(0, 1, deltaTime);
         ProcessTeamTicks(1, 0, deltaTime);
+
+        // 1. Limpiar unidades caídas
         CleanUpDeadUnits(0);
         CleanUpDeadUnits(1);
+
+        // 2. Verificar condición de victoria basada en el conteo de la lista
         CheckWinCondition();
     }
 
@@ -142,11 +139,15 @@ public class GameManager : MonoBehaviour
             {
                 u.bonusSpeed = 0;
                 u.damageMultiplier = 1f;
+                if (u.commanderBuffTimer > 0)
+                {
+                    u.damageMultiplier *= 1.20f;
+                    u.bonusSpeed += 0.15f;
+                }
             }
         }
 
-        // VOID AURA
-        int hordeCount = activeUnits[1].FindAll(u => u.cardId == CardID.VoidHorde).Count;
+        int hordeCount = activeUnits[1].FindAll(u => u.cardId == CardID.VoidHorde && !u.IsDead).Count;
         float hordeMultiplier = 1f;
         if (hordeCount == 2) hordeMultiplier = 1.20f;
         else if (hordeCount == 3) hordeMultiplier = 1.35f;
@@ -155,20 +156,6 @@ public class GameManager : MonoBehaviour
         foreach (Unit u in activeUnits[1])
         {
             if (u.cardId == CardID.VoidHorde) u.damageMultiplier *= hordeMultiplier;
-            if (u.cardId == CardID.VoidCommander) u.bonusSpeed += (activeUnits[1].Count * 0.08f);
-        }
-
-        // SOLLAR AURA (Commander Buff)
-        Unit sollarCmdr = activeUnits[0].Find(u => u.cardId == CardID.SollarCommander);
-        if (sollarCmdr != null && !sollarCmdr.IsDead)
-        {
-            foreach (Unit ally in activeUnits[0])
-            {
-                if (Vector2.Distance(sollarCmdr.logicalPosition, ally.logicalPosition) <= 3f)
-                {
-                    ally.bonusSpeed += 0.20f; // BUFF
-                }
-            }
         }
     }
 
@@ -176,25 +163,26 @@ public class GameManager : MonoBehaviour
     {
         foreach (Unit attacker in activeUnits[attackerTeamId])
         {
+            if (attacker.IsDead) continue;
+
+            if (attacker.antiHealTimer > 0) attacker.antiHealTimer -= deltaTime;
+            if (attacker.vulnerabilityTimer > 0) attacker.vulnerabilityTimer -= deltaTime;
+            if (attacker.commanderBuffTimer > 0) attacker.commanderBuffTimer -= deltaTime;
+            if (attacker.duelistRegenBuffTimer > 0) attacker.duelistRegenBuffTimer -= deltaTime;
+
+            float currentRegenRate = attacker.baseRegen;
+            if (attacker.commanderBuffTimer > 0) currentRegenRate += 0.04f;
+            if (attacker.duelistRegenBuffTimer > 0) currentRegenRate += 0.02f;
+
+            if (currentRegenRate > 0 && attacker.currentHp < attacker.maxHp)
+            {
+                attacker.Heal(attacker.maxHp * currentRegenRate * deltaTime);
+            }
+
             if (attacker.stunTimer > 0)
             {
                 attacker.stunTimer -= deltaTime;
                 continue;
-            }
-
-            if (attacker.cardId == CardID.SollarForce)
-            {
-                attacker.passiveTimer += deltaTime;
-                if (attacker.passiveTimer >= 4f)
-                {
-                    Unit closest = GetClosestTarget(attacker, defenderTeamId);
-                    if (closest != null)
-                    {
-                        closest.stunTimer = 1.2f; // BUFF
-                        OnVisualEffectRequested?.Invoke(attacker, closest, "ForceHit"); // SOLICITA PARTICULAS
-                    }
-                    attacker.passiveTimer = 0f;
-                }
             }
 
             if (attacker.skillCooldown > 0)
@@ -224,47 +212,62 @@ public class GameManager : MonoBehaviour
         float mitigationFactor = 100f / (100f + target.FinalDef);
         float realDamage = attacker.FinalAtk * mitigationFactor;
         realDamage *= attacker.damageMultiplier;
-        realDamage *= target.damageTakenMultiplier;
+        if (target.vulnerabilityTimer > 0) realDamage *= 1.25f;
 
         target.TakeDamage(realDamage);
         OnUnitAttacked?.Invoke(attacker, target, realDamage);
+
+        float activeLifesteal = attacker.baseLifesteal;
+        if (attacker.ownerId == 1 && target.vulnerabilityTimer > 0) activeLifesteal += 0.10f;
+        if (activeLifesteal > 0) attacker.Heal(realDamage * activeLifesteal);
     }
 
     private void ExecuteSkill(Unit caster, int enemyTeamId)
     {
         OnUnitSkillCast?.Invoke(caster, caster.cardId);
-
         switch (caster.cardId)
         {
             case CardID.SollarDuelist:
+                float totalDamageDealt = 0;
                 foreach (Unit enemy in activeUnits[enemyTeamId])
                 {
-                    if (Vector2.Distance(caster.logicalPosition, enemy.logicalPosition) <= 2.5f)
-                        enemy.TakeDamage(30f);
+                    if (!enemy.IsDead && Vector2.Distance(caster.logicalPosition, enemy.logicalPosition) <= 2.5f)
+                    {
+                        enemy.TakeDamage(55f);
+                        totalDamageDealt += 55f;
+                    }
+                }
+                if (totalDamageDealt > 0) { caster.Heal(totalDamageDealt * 0.15f); caster.duelistRegenBuffTimer = 2.0f; }
+                break;
+            case CardID.SollarCommander:
+                foreach (Unit ally in activeUnits[caster.ownerId])
+                {
+                    if (!ally.IsDead && Vector2.Distance(caster.logicalPosition, ally.logicalPosition) <= 5f)
+                        ally.commanderBuffTimer = 4.0f;
                 }
                 break;
             case CardID.SollarForce:
                 Unit targetForce = GetClosestTarget(caster, enemyTeamId);
                 if (targetForce != null)
                 {
-                    targetForce.TakeDamage(30f);
-                    targetForce.stunTimer = 1.2f;
-                    targetForce.logicalPosition = new Vector2(targetForce.logicalPosition.x + 1.5f, targetForce.logicalPosition.y);
+                    targetForce.TakeDamage(70f);
+                    targetForce.stunTimer = 1.0f;
+                    targetForce.antiHealTimer = 3.0f;
+                    OnVisualEffectRequested?.Invoke(caster, targetForce, "ForceHit");
                 }
-                break;
-            case CardID.SollarCommander:
-                foreach (Unit ally in activeUnits[caster.ownerId])
-                {
-                    ally.damageMultiplier *= 1.20f;
-                }
-                break;
-            case CardID.VoidHeavyShooter:
-                Unit targetShooter = GetClosestTarget(caster, enemyTeamId);
-                if (targetShooter != null) targetShooter.TakeDamage(75f);
                 break;
             case CardID.VoidCommander:
                 Unit targetCom = GetClosestTarget(caster, enemyTeamId);
-                if (targetCom != null) targetCom.damageTakenMultiplier = 1.25f;
+                if (targetCom != null) targetCom.vulnerabilityTimer = 4.0f;
+                break;
+            case CardID.VoidHeavyShooter:
+                Unit targetShooter = GetClosestTarget(caster, enemyTeamId);
+                if (targetShooter != null)
+                {
+                    float finalDmg = 75f;
+                    if (targetShooter.antiHealTimer > 0 || targetShooter.vulnerabilityTimer > 0 || targetShooter.stunTimer > 0) finalDmg *= 1.30f;
+                    targetShooter.TakeDamage(finalDmg);
+                }
                 break;
         }
     }
@@ -273,7 +276,6 @@ public class GameManager : MonoBehaviour
     {
         Unit bestTarget = null;
         float closestDist = float.MaxValue;
-
         bool isFrontlineAlive = activeUnits[enemyTeamId].Exists(u => !u.IsDead && u.row == 0);
         int targetRow = isFrontlineAlive ? 0 : 1;
 
@@ -281,13 +283,8 @@ public class GameManager : MonoBehaviour
         {
             if (enemy.IsDead) continue;
             if (enemy.row != targetRow) continue;
-
             float dist = Vector2.Distance(attacker.logicalPosition, enemy.logicalPosition);
-            if (dist < closestDist)
-            {
-                closestDist = dist;
-                bestTarget = enemy;
-            }
+            if (dist < closestDist) { closestDist = dist; bestTarget = enemy; }
         }
         return bestTarget;
     }
@@ -298,23 +295,38 @@ public class GameManager : MonoBehaviour
         {
             if (activeUnits[playerId][i].IsDead)
             {
-                OnUnitDied?.Invoke(playerId, activeUnits[playerId][i]);
+                Unit fallen = activeUnits[playerId][i];
+                OnUnitDied?.Invoke(playerId, fallen);
                 activeUnits[playerId].RemoveAt(i);
+                LogMessage(playerId, $"<color=gray>La unidad {fallen.cardId} ha caído en combate.</color>");
             }
         }
     }
 
     private void CheckWinCondition()
     {
-        bool p0Dead = players[0].hp <= 0 || activeUnits[0].Count == 0;
-        bool p1Dead = players[1].hp <= 0 || activeUnits[1].Count == 0;
+        // Conteo de unidades vivas por bando
+        int playerUnitsCount = activeUnits[0].Count;
+        int aiUnitsCount = activeUnits[1].Count;
 
-        if (p0Dead || p1Dead)
+        if (playerUnitsCount == 0 || aiUnitsCount == 0)
         {
             currentPhase = RoundPhase.End;
-            if (p0Dead && p1Dead) LogMessage(-1, "Game Over: DRAW!");
-            else if (p0Dead) LogMessage(-1, "Game Over: Void Dominion WINS!");
-            else if (p1Dead) LogMessage(-1, "Game Over: Solar Alliance WINS!");
+
+            if (playerUnitsCount == 0 && aiUnitsCount == 0)
+            {
+                LogMessage(-1, "<b>RESULTADO: EMPATE TÉCNICO.</b> Ambos ejércitos han sido aniquilados.");
+            }
+            else if (playerUnitsCount == 0)
+            {
+                LogMessage(-1, "<color=purple><b>RESULTADO: VICTORIA DEL VACÍO.</b> La oscuridad consume el campo de batalla.</color>");
+            }
+            else if (aiUnitsCount == 0)
+            {
+                LogMessage(-1, "<color=orange><b>RESULTADO: VICTORIA SOLAR.</b> La luz ha purgado la corrupción.</color>");
+            }
+
+            OnPhaseChanged?.Invoke(currentPhase);
         }
     }
 

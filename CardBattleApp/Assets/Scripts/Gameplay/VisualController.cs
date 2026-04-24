@@ -129,28 +129,30 @@ public class VisualController : MonoBehaviour
             Vector3 lookPosition = new Vector3(targetPos.x, attackerObj.transform.position.y, targetPos.z);
             attackerObj.transform.LookAt(lookPosition);
 
+            // CORRECCIÓN DE ROLES VISUALES:
+            // Ahora la Horda, el Tirador Pesado y Sollar Force son los únicos con armas a distancia.
+            // Sollar Commander y Sollar Duelist van a cuerpo a cuerpo.
             bool isWeaponRanged = attacker.cardId == CardID.VoidHorde ||
                                   attacker.cardId == CardID.VoidHeavyShooter ||
-                                  attacker.cardId == CardID.SollarCommander;
-
-            bool isForceUser = attacker.cardId == CardID.SollarForce;
+                                  attacker.cardId == CardID.SollarForce;
 
             float distanceToTarget = Vector3.Distance(attackerObj.transform.position, targetPos);
             float maxRangedDistance = 4.5f;
 
-            if (isWeaponRanged || isForceUser)
+            if (isWeaponRanged)
             {
                 if (distanceToTarget > maxRangedDistance)
                 {
-                    StartCoroutine(AnimateWalkToRangeAndAttack(attacker, attackerObj, defenderObj, maxRangedDistance, isWeaponRanged));
+                    StartCoroutine(AnimateWalkToRangeAndAttack(attacker, attackerObj, defenderObj, maxRangedDistance, true));
                 }
                 else
                 {
-                    ExecuteRangedVisuals(attackerObj, defenderObj, isWeaponRanged);
+                    ExecuteRangedVisuals(attackerObj, defenderObj, true);
                 }
             }
             else
             {
+                // Todos los Melee (Duelist, SollarCommander, VoidCommander) corren a golpear
                 StartCoroutine(AnimateMeleeWalkAndStrike(attacker, attackerObj.transform, defenderObj.transform.position));
             }
         }
