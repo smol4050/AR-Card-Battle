@@ -110,28 +110,29 @@ public class VisualController : MonoBehaviour
 
         GameObject go = Instantiate(prefab, worldPos, boardArea.rotation);
 
-        // Inicializar UI
         UnitWorldUI ui = go.GetComponent<UnitWorldUI>();
         if (ui != null) ui.Initialize(unitData);
 
-        // Posición lógica
         Vector3 offset = worldPos - boardArea.position;
         unitData.logicalPosition = new Vector2(offset.x, offset.z);
 
-        // NavMeshAgent: el movimiento real lo controla el VisualController en las corrutinas
         NavMeshAgent agent = go.GetComponent<NavMeshAgent>();
         if (agent != null)
         {
-            agent.speed = unitData.FinalSpeed * 3f;  // escala world-units/s
+            // Seguridad: Apagamos el agente, movemos el objeto y lo volvemos a prender
+            // Esto fuerza a Unity a recalcular el anclaje al NavMesh correctamente.
+            agent.enabled = false;
+            go.transform.position = worldPos;
+            agent.enabled = true;
+
+            agent.speed = unitData.FinalSpeed * 3f;
             agent.stoppingDistance = 0.1f;
             agent.autoBraking = true;
         }
 
-        // Animator idle
         Animator anim = go.GetComponent<Animator>();
         if (anim != null) anim.SetFloat(ANIM_VELOCIDAD, 0f);
 
-        // Partículas apagadas al inicio
         foreach (ParticleSystem ps in go.GetComponentsInChildren<ParticleSystem>(true))
             if (ps.isPlaying) ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
 
@@ -433,16 +434,16 @@ public class VisualController : MonoBehaviour
 
     // ─── MOVIMIENTO MELEE CON NAVMESH ─────────────────────────────────────────
     private IEnumerator NavMeshMeleeWalkAndStrike(
-        Unit attackerData, GameObject attObj, GameObject defObj, Action onImpact)
+         Unit attackerData, GameObject attObj, GameObject defObj, Action onImpact)
     {
         if (attObj == null || defObj == null) yield break;
 
         NavMeshAgent agent = attObj.GetComponent<NavMeshAgent>();
         Animator anim = attObj.GetComponent<Animator>();
 
-        if (agent == null)
+        // Si no hay agente o falló al anclarse al NavMesh, usamos el fallback
+        if (agent == null || !agent.isOnNavMesh)
         {
-            // Fallback sin NavMesh
             yield return StartCoroutine(FallbackMeleeWalk(attObj, defObj, onImpact));
             yield break;
         }
@@ -451,25 +452,26 @@ public class VisualController : MonoBehaviour
         Vector3 combatPos = enemyPos + (attObj.transform.position - enemyPos).normalized * 1.2f;
         combatPos.y = attObj.transform.position.y;
 
-        // Navegar hacia la posición de combate
         agent.isStopped = false;
         agent.SetDestination(combatPos);
         anim?.SetFloat(ANIM_VELOCIDAD, 1f);
 
-        while (attObj != null && !agent.pathPending
-               && agent.remainingDistance > agent.stoppingDistance + 0.05f)
+        // Esperar un frame para que el agente calcule el path y evite el error de GetRemainingDistance
+        yield return null;
+
+        // Añadida la validación agent.isOnNavMesh dentro del bucle
+        while (attObj != null && agent != null && agent.isOnNavMesh &&
+               !agent.pathPending && agent.remainingDistance > agent.stoppingDistance + 0.05f)
         {
-            // Sync speed con el estado lógico (puede haber slow activo)
             agent.speed = attackerData.FinalSpeed * 3f;
             yield return null;
         }
 
-        agent.isStopped = true;
+        if (agent != null && agent.isOnNavMesh) agent.isStopped = true;
         anim?.SetFloat(ANIM_VELOCIDAD, 0f);
 
         if (attObj == null || defObj == null) yield break;
 
-        // Animación de golpe
         int variacion = UnityEngine.Random.Range(0, 2);
         anim?.SetInteger(ANIM_NUM_ATAQUE, variacion);
         anim?.SetTrigger(ANIM_ATACAR);
@@ -477,7 +479,6 @@ public class VisualController : MonoBehaviour
         yield return new WaitForSeconds(0.2f);
         if (attObj == null || defObj == null) yield break;
 
-        // Micro-lunge
         Vector3 strikePos = combatPos + (enemyPos - combatPos).normalized * 0.4f;
         float t = 0f;
         while (t < 0.08f && attObj != null)
@@ -487,14 +488,13 @@ public class VisualController : MonoBehaviour
             yield return null;
         }
 
-        // ── IMPACTO ───────────────────────────────────────────────────────────
         onImpact?.Invoke();
         PlayHitParticles(defObj);
 
         if (attObj != null) attObj.transform.position = combatPos;
     }
 
-    // ─── MOVIMIENTO RANGED CON NAVMESH ────────────────────────────────────────
+    // ─── MOVIMIENTO RANGED CON NAVMESH (Actualizado) ──────────────────────────
     private IEnumerator NavMeshWalkToRangeAndShoot(
         Unit attackerData, GameObject attObj, GameObject defObj, float range, Action onImpact)
     {
@@ -503,7 +503,7 @@ public class VisualController : MonoBehaviour
         NavMeshAgent agent = attObj.GetComponent<NavMeshAgent>();
         Animator anim = attObj.GetComponent<Animator>();
 
-        if (agent == null)
+        if (agent == null || !agent.isOnNavMesh)
         {
             yield return StartCoroutine(FallbackRangedWalk(attObj, defObj, range, onImpact));
             yield break;
@@ -517,14 +517,17 @@ public class VisualController : MonoBehaviour
         agent.SetDestination(combatPos);
         anim?.SetFloat(ANIM_VELOCIDAD, 1f);
 
-        while (attObj != null && !agent.pathPending
-               && agent.remainingDistance > agent.stoppingDistance + 0.05f)
+        // Esperar un frame
+        yield return null;
+
+        while (attObj != null && agent != null && agent.isOnNavMesh &&
+               !agent.pathPending && agent.remainingDistance > agent.stoppingDistance + 0.05f)
         {
             agent.speed = attackerData.FinalSpeed * 3f;
             yield return null;
         }
 
-        agent.isStopped = true;
+        if (agent != null && agent.isOnNavMesh) agent.isStopped = true;
         anim?.SetFloat(ANIM_VELOCIDAD, 0f);
 
         if (attObj == null || defObj == null) yield break;

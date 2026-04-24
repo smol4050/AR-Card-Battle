@@ -66,6 +66,15 @@ public class GameManager : MonoBehaviour
         _shipUsedThisRound[0] = false;
         _shipUsedThisRound[1] = false;
 
+        // Reiniciar variables de combate
+        combatTimer = 0f;
+        isSuddenDeathActive = false;
+        suddenDeathMultiplier = 1f;
+
+        // Dar 10 de energía inicial
+        players[0].energy = 10;
+        players[1].energy = 10;
+
         players[0].StartTurn();
         players[1].StartTurn();
         OnPhaseChanged?.Invoke(currentPhase);
@@ -149,30 +158,28 @@ public class GameManager : MonoBehaviour
     private Unit CreateUnit(int playerId, CardID cardId, int row, int slotIndex)
     {
         Unit u = null;
+        float hpScale = 3f;
+
         switch (cardId)
         {
             case CardID.SollarDuelist:
-                u = new Unit(playerId, cardId, row, slotIndex, 260f, 38f, 55f, 0.95f, Vector2.zero,
-                             lifesteal: 0.10f, regen: 0.01f);
+                u = new Unit(playerId, cardId, row, slotIndex, 260f * hpScale, 38f, 55f, 0.95f, Vector2.zero, lifesteal: 0.10f, regen: 0.01f);
                 u.skillCooldown = 5f;
                 break;
             case CardID.SollarCommander:
-                u = new Unit(playerId, cardId, row, slotIndex, 320f, 25f, 70f, 0.80f, Vector2.zero,
-                             regen: 0.02f, healPower: 0.25f);
+                u = new Unit(playerId, cardId, row, slotIndex, 320f * hpScale, 25f, 70f, 0.80f, Vector2.zero, regen: 0.02f, healPower: 0.25f);
                 u.skillCooldown = 8f;
                 break;
-            case CardID.SollarForce:           // SOL-9 "Aegis Unit" — cost:2
-                u = new Unit(playerId, cardId, row, slotIndex, 125f, 48f, 25f, 1.10f, Vector2.zero);
+            case CardID.SollarForce:
+                u = new Unit(playerId, cardId, row, slotIndex, 125f * hpScale, 48f, 25f, 1.10f, Vector2.zero);
                 u.skillCooldown = 5f;
                 break;
             case CardID.VoidCommander:
-                u = new Unit(playerId, cardId, row, slotIndex, 190f, 28f, 35f, 0.95f, Vector2.zero,
-                             lifesteal: 0.08f);
+                u = new Unit(playerId, cardId, row, slotIndex, 190f * hpScale, 28f, 35f, 0.95f, Vector2.zero, lifesteal: 0.08f);
                 u.skillCooldown = 7f;
                 break;
             case CardID.VoidHeavyShooter:
-                u = new Unit(playerId, cardId, row, slotIndex, 115f, 65f, 18f, 1.05f, Vector2.zero,
-                             lifesteal: 0.12f);
+                u = new Unit(playerId, cardId, row, slotIndex, 115f * hpScale, 65f, 18f, 1.05f, Vector2.zero, lifesteal: 0.12f);
                 u.skillCooldown = 6f;
                 break;
         }
@@ -221,10 +228,19 @@ public class GameManager : MonoBehaviour
     {
         if (currentPhase != RoundPhase.Combat) return;
 
+        // Lógica de Muerte Súbita
+        combatTimer += deltaTime;
+        if (combatTimer >= 30f && !isSuddenDeathActive)
+        {
+            isSuddenDeathActive = true;
+            suddenDeathMultiplier = 3f; // Todo es 3 veces más rápido/fuerte
+            LogMessage(-1, "<b><color=red>¡TIEMPO AGOTADO! MUERTE SÚBITA ACTIVADA</color></b>");
+        }
+
         UpdateShips(deltaTime);
         UpdateAurasAndPassives();
-        ProcessTeamTicks(0, 1, deltaTime);
-        ProcessTeamTicks(1, 0, deltaTime);
+        ProcessTeamTicks(0, 1, deltaTime * suddenDeathMultiplier); // Aceleramos los ticks
+        ProcessTeamTicks(1, 0, deltaTime * suddenDeathMultiplier);
 
         CleanUpDeadUnits(0);
         CleanUpDeadUnits(1);

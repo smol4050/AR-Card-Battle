@@ -923,12 +923,12 @@ MonoBehaviour:
   m_EditorClassIdentifier: Unity.AI.Navigation::Unity.AI.Navigation.NavMeshSurface
   m_SerializedVersion: 0
   m_AgentTypeID: 0
-  m_CollectObjects: 0
+  m_CollectObjects: 1
   m_Size: {x: 10, y: 10, z: 10}
   m_Center: {x: 0, y: 2, z: 0}
   m_LayerMask:
     serializedVersion: 2
-    m_Bits: 4294967295
+    m_Bits: 1
   m_UseGeometry: 0
   m_DefaultArea: 0
   m_GenerateLinks: 0
@@ -2820,6 +2820,14 @@ MonoBehaviour:
   prefabVoidHorde: {fileID: 5958500295921118325, guid: 832715038b21ca4418e0cbfce8d8366d, type: 3}
   prefabVoidCommander: {fileID: 5958500295921118325, guid: e09945c28a64dd4418066d26d138b8ed, type: 3}
   prefabVoidHeavyShooter: {fileID: 5958500295921118325, guid: 2d63dab9db22458448421a0a7faa7f06, type: 3}
+  p0ShipEntryPoint: {fileID: 0}
+  p0ShipBoardPoint: {fileID: 0}
+  p0ShipConvergencePoint: {fileID: 0}
+  p0ShipPatrolPoints: []
+  p1ShipEntryPoint: {fileID: 0}
+  p1ShipBoardPoint: {fileID: 0}
+  p1ShipConvergencePoint: {fileID: 0}
+  p1ShipPatrolPoints: []
   prefabSolarVanguard: {fileID: 131249342222860835, guid: 33c3bc459c5ae194bb8c514611402f2d, type: 3}
   prefabAbyssReaper: {fileID: 131249342222860835, guid: 228c3d92a59795447bd57768ac6d869a, type: 3}
   prefabVoidBullet: {fileID: 6888773692608800421, guid: 2ff449dc4c96e2e47b3543496ef6e8c6, type: 3}
@@ -2884,6 +2892,7 @@ MonoBehaviour:
     hp: 0
     energy: 0
     maxEnergy: 0
+  suddenDeathMultiplier: 1
   isPlayerReady: 0000
 --- !u!4 &1465123500
 Transform:
@@ -2940,7 +2949,7 @@ GameObject:
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
-  m_StaticEditorFlags: 2147483647
+  m_StaticEditorFlags: 0
   m_IsActive: 1
 --- !u!64 &1470251431
 MeshCollider:
