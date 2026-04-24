@@ -1,16 +1,9 @@
-using UnityEngine;
 
-public class IColocalizationRoom : MonoBehaviour
+
+public interface IColocalizationRoom 
 {
-    // Start is called once before the first execution of Update after the MonoBehaviour is created
-    void Start()
-    {
-        
-    }
-
-    // Update is called once per frame
-    void Update()
-    {
-        
-    }
+    public void SharedSpaceStartTracking();
+    public void CreateRoomOptions();
+    public void StartHost();
+    public void StartClient();
 }
