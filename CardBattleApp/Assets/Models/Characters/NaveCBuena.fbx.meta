@@ -3,7 +3,17 @@ guid: add35e0774fbc9b439481b3c72d77145
 ModelImporter:
   serializedVersion: 24200
   internalIDToNameTable: []
-  externalObjects: {}
+  externalObjects:
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Material.007
+    second: {fileID: 2100000, guid: 5b37941dc0543224780e0dd19424ff1c, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: X-Wing
+    second: {fileID: 2100000, guid: df10fc3929e26704ebaf42e45f4863ef, type: 2}
   materials:
     materialImportMode: 2
     materialName: 0

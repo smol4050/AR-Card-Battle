@@ -3,7 +3,42 @@ guid: 370860b40e420734c9690614843c7bad
 ModelImporter:
   serializedVersion: 24200
   internalIDToNameTable: []
-  externalObjects: {}
+  externalObjects:
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Material.007
+    second: {fileID: 2100000, guid: 0e49e428869e94a43ae87ec82913c0a2, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: canopy
+    second: {fileID: 2100000, guid: 902f2f9e69176c146b7cc0b69a388d79, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: greebles
+    second: {fileID: 2100000, guid: fecf37353012c394f8ad9c396f975888, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: hull
+    second: {fileID: 2100000, guid: 7c41b2b444660524ca32bd6981ede60d, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: interior
+    second: {fileID: 2100000, guid: 9ed5921a5c25e0045af5153ec93d4172, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: spar
+    second: {fileID: 2100000, guid: bfff6cf687be4954fab92f85cbadabb0, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: wings
+    second: {fileID: 2100000, guid: 35b73ccb091cc8b4a9c1520f670158f3, type: 2}
   materials:
     materialImportMode: 2
     materialName: 0
