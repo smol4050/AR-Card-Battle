@@ -10,8 +10,7 @@ public class TutorialAIController : MonoBehaviour
     public AIDifficulty currentDifficulty = AIDifficulty.Superior;
 
     [Header("Configuración de Facción de la IA")]
-    [Tooltip("Añade aquí las cartas que esta IA tiene permitido comprar.")]
-    public List<CardID> availableCards; // Permite que la IA juegue Sollar o Void
+    public List<CardID> availableCards;
 
     [Header("Zonas de Despliegue")]
     public Transform[] frontSlots = new Transform[3];
@@ -46,28 +45,29 @@ public class TutorialAIController : MonoBehaviour
 
         _currentDecisions.Clear();
         _enemyDraftSeen.Clear();
+
+        // La IA siempre juega con el Jugador 1 (Index 1)
         int energy = gameManager.players[1].energy;
 
-        // 1. ESCANEAR AL ENEMIGO (Revisar el tablero del jugador 0)
+        // 1. ESCANEO DE AMENAZAS (Análisis del fenómeno enemigo)
         foreach (Unit enemyUnit in gameManager.activeUnits[0])
         {
-            _enemyDraftSeen.Add(enemyUnit.cardId);
+            if (!enemyUnit.IsDead) _enemyDraftSeen.Add(enemyUnit.cardId);
         }
 
-        // 2. BUSCAR EL COUNTER PERFECTO
+        // 2. ADAPTACIÓN (Búsqueda en el banco de datos de Mahoraga)
         List<AISlotDecision> bestStrategy = null;
         if (currentDifficulty == AIDifficulty.Superior)
         {
             bestStrategy = AIDataBank.GetBestCounterStrategy(_enemyDraftSeen);
         }
 
-        // 3. EJECUTAR ESTRATEGIA (Si existe y tiene recursos)
+        // 3. DESPLIEGUE DE CONTRAMEDIDA
         if (bestStrategy != null)
         {
             foreach (var decision in bestStrategy)
             {
                 if (energy <= 0) break;
-                // Verificamos que la carta esté en su mazo permitido actual
                 if (availableCards.Contains(decision.cardId) && PlaceUnit(decision.cardId, decision.slotIndex))
                 {
                     energy--;
@@ -75,7 +75,7 @@ public class TutorialAIController : MonoBehaviour
             }
         }
 
-        // 4. IMPROVISACIÓN (Rellenar espacios si sobra energía, el DataBank falló o es Principiante)
+        // 4. EVOLUCIÓN E IMPROVISACIÓN (Si sobra energía o no hay datos previos)
         while (energy > 0 && _currentDecisions.Count < 6)
         {
             CardID nextCard = DecideNextCardFromDeck();
@@ -90,16 +90,46 @@ public class TutorialAIController : MonoBehaviour
 
     private CardID DecideNextCardFromDeck()
     {
-        if (availableCards == null || availableCards.Count == 0) return CardID.VoidHorde; // Fallback extremo
+        if (availableCards == null || availableCards.Count == 0) return CardID.VoidHorde;
 
-        // Elige una carta aleatoria de su mazo permitido
-        int randomIndex = Random.Range(0, availableCards.Count);
-        return availableCards[randomIndex];
+        bool hasCommander = _currentDecisions.Exists(d => d.cardId == CardID.VoidCommander || d.cardId == CardID.SollarCommander);
+
+        // --- LÓGICA DE SINERGIA REFORZADA ---
+
+        // A. Sinergia de Ejecución (Heavy Shooter + Debuffs)
+        bool needsDebuffs = _currentDecisions.Exists(d => d.cardId == CardID.VoidHeavyShooter);
+        if (needsDebuffs)
+        {
+            CardID debuffer = availableCards.FirstOrDefault(c => c == CardID.VoidCommander || c == CardID.SollarForce);
+            if (debuffer != CardID.None && Random.value > 0.5f) return debuffer;
+        }
+
+        // B. Contramedida de Sustain (Anti-Heal vs Duelists)
+        bool enemyHasSustain = _enemyDraftSeen.Contains(CardID.SollarDuelist);
+        if (enemyHasSustain && currentDifficulty == AIDifficulty.Superior)
+        {
+            if (availableCards.Contains(CardID.SollarForce) && Random.value > 0.7f) return CardID.SollarForce;
+        }
+
+        // C. Restricción de Comandante (Unicidad)
+        List<CardID> safeDeck = new List<CardID>(availableCards);
+        if (hasCommander)
+        {
+            safeDeck.RemoveAll(c => c == CardID.VoidCommander || c == CardID.SollarCommander);
+        }
+
+        if (safeDeck.Count == 0) return availableCards[0];
+        return safeDeck[Random.Range(0, safeDeck.Count)];
     }
 
     private int FindBestSlotForRole(CardID card)
     {
-        bool isFrontline = card == CardID.VoidHorde || card == CardID.SollarDuelist || card == CardID.SollarForce;
+        // Frontline: Bruisers y Tanques
+        bool isFrontline = card == CardID.VoidHorde ||
+                           card == CardID.SollarDuelist ||
+                           card == CardID.SollarCommander ||
+                           card == CardID.VoidCommander;
+
         int start = isFrontline ? 0 : 3;
         int end = isFrontline ? 3 : 6;
 
@@ -107,6 +137,7 @@ public class TutorialAIController : MonoBehaviour
         {
             if (!_currentDecisions.Exists(d => d.slotIndex == i)) return i;
         }
+
         for (int i = 0; i < 6; i++)
         {
             if (!_currentDecisions.Exists(d => d.slotIndex == i)) return i;
@@ -135,9 +166,12 @@ public class TutorialAIController : MonoBehaviour
     private void EvaluateResult()
     {
         if (_currentDecisions.Count == 0) return;
-        bool win = gameManager.players[0].hp <= 0 || gameManager.activeUnits[0].Count == 0;
 
-        // Guardamos el historial vinculando lo que vimos enfrente con lo que respondimos
-        AIDataBank.RecordBattleResult(_enemyDraftSeen, _currentDecisions, win);
+        // Mahoraga analiza si el resultado fue una victoria para el bando de la IA
+        // Se considera victoria si el bando enemigo (Jugador 0) se quedó sin HP o unidades
+        bool aiWon = gameManager.players[0].hp <= 0 || gameManager.activeUnits[0].Count == 0;
+
+        AIDataBank.RecordBattleResult(_enemyDraftSeen, _currentDecisions, aiWon);
+        Debug.Log($"<color=lime>Mahoraga: Ciclo de aprendizaje completado. Resultado: {(aiWon ? "Victoria" : "Derrota")}.</color>");
     }
 }
