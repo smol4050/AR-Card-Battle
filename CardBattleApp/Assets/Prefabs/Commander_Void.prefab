@@ -614,6 +614,46 @@ PrefabInstance:
       propertyPath: m_Name
       value: VeiderRig (1)
       objectReference: {fileID: 0}
+    - target: {fileID: 1293518055611171393, guid: e8480d3988738cc40845899af29f4505, type: 3}
+      propertyPath: 'm_Materials.Array.data[0]'
+      value: 
+      objectReference: {fileID: -876546973899608171, guid: 5274567a8cde93a43abcfb290f6f8f1b, type: 3}
+    - target: {fileID: 1293518055611171393, guid: e8480d3988738cc40845899af29f4505, type: 3}
+      propertyPath: 'm_Materials.Array.data[1]'
+      value: 
+      objectReference: {fileID: -876546973899608171, guid: 5274567a8cde93a43abcfb290f6f8f1b, type: 3}
+    - target: {fileID: 1293518055611171393, guid: e8480d3988738cc40845899af29f4505, type: 3}
+      propertyPath: 'm_Materials.Array.data[2]'
+      value: 
+      objectReference: {fileID: -876546973899608171, guid: 5274567a8cde93a43abcfb290f6f8f1b, type: 3}
+    - target: {fileID: 1293518055611171393, guid: e8480d3988738cc40845899af29f4505, type: 3}
+      propertyPath: 'm_Materials.Array.data[3]'
+      value: 
+      objectReference: {fileID: -876546973899608171, guid: 5274567a8cde93a43abcfb290f6f8f1b, type: 3}
+    - target: {fileID: 1293518055611171393, guid: e8480d3988738cc40845899af29f4505, type: 3}
+      propertyPath: 'm_Materials.Array.data[4]'
+      value: 
+      objectReference: {fileID: -876546973899608171, guid: 5274567a8cde93a43abcfb290f6f8f1b, type: 3}
+    - target: {fileID: 1293518055611171393, guid: e8480d3988738cc40845899af29f4505, type: 3}
+      propertyPath: 'm_Materials.Array.data[5]'
+      value: 
+      objectReference: {fileID: -876546973899608171, guid: 5274567a8cde93a43abcfb290f6f8f1b, type: 3}
+    - target: {fileID: 1293518055611171393, guid: e8480d3988738cc40845899af29f4505, type: 3}
+      propertyPath: 'm_Materials.Array.data[6]'
+      value: 
+      objectReference: {fileID: -876546973899608171, guid: 5274567a8cde93a43abcfb290f6f8f1b, type: 3}
+    - target: {fileID: 1293518055611171393, guid: e8480d3988738cc40845899af29f4505, type: 3}
+      propertyPath: 'm_Materials.Array.data[8]'
+      value: 
+      objectReference: {fileID: -876546973899608171, guid: 5274567a8cde93a43abcfb290f6f8f1b, type: 3}
+    - target: {fileID: 1293518055611171393, guid: e8480d3988738cc40845899af29f4505, type: 3}
+      propertyPath: 'm_Materials.Array.data[9]'
+      value: 
+      objectReference: {fileID: -876546973899608171, guid: 5274567a8cde93a43abcfb290f6f8f1b, type: 3}
+    - target: {fileID: 1293518055611171393, guid: e8480d3988738cc40845899af29f4505, type: 3}
+      propertyPath: 'm_Materials.Array.data[12]'
+      value: 
+      objectReference: {fileID: -876546973899608171, guid: 5274567a8cde93a43abcfb290f6f8f1b, type: 3}
     - target: {fileID: 1587957199799745905, guid: e8480d3988738cc40845899af29f4505, type: 3}
       propertyPath: m_TagString
       value: WeaponVFX

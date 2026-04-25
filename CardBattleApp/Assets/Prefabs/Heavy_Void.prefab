@@ -644,7 +644,11 @@ PrefabInstance:
     - target: {fileID: -7217755008323464898, guid: 3e5b0ce5ee8325346924506b82a4a89b, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
       value: 
-      objectReference: {fileID: 2100000, guid: 0dde1cb4ab26df34bbfe95766bb53453, type: 2}
+      objectReference: {fileID: -876546973899608171, guid: 5274567a8cde93a43abcfb290f6f8f1b, type: 3}
+    - target: {fileID: -7217755008323464898, guid: 3e5b0ce5ee8325346924506b82a4a89b, type: 3}
+      propertyPath: 'm_Materials.Array.data[1]'
+      value: 
+      objectReference: {fileID: -876546973899608171, guid: 5274567a8cde93a43abcfb290f6f8f1b, type: 3}
     - target: {fileID: 919132149155446097, guid: 3e5b0ce5ee8325346924506b82a4a89b, type: 3}
       propertyPath: m_Name
       value: RobotRigged

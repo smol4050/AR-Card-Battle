@@ -614,6 +614,14 @@ PrefabInstance:
       propertyPath: m_Name
       value: MujerCRigge (1)
       objectReference: {fileID: 0}
+    - target: {fileID: 4502622358619295455, guid: d30ce5ceb30cf60429b92e8481b70737, type: 3}
+      propertyPath: 'm_Materials.Array.data[0]'
+      value: 
+      objectReference: {fileID: 2100000, guid: 49278e7082e78614e90aca03745bfab2, type: 2}
+    - target: {fileID: 4502622358619295455, guid: d30ce5ceb30cf60429b92e8481b70737, type: 3}
+      propertyPath: 'm_Materials.Array.data[1]'
+      value: 
+      objectReference: {fileID: 2100000, guid: 49278e7082e78614e90aca03745bfab2, type: 2}
     - target: {fileID: 4658946678379703625, guid: d30ce5ceb30cf60429b92e8481b70737, type: 3}
       propertyPath: m_ApplyRootMotion
       value: 0

@@ -304,7 +304,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
-  m_Material: {fileID: 0}
+  m_Material: {fileID: -876546973899608171, guid: d2f5c980fa3792d4aa86f22e67656937, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
@@ -578,6 +578,22 @@ PrefabInstance:
       propertyPath: prewarm
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 2423421482342953178, guid: fa86a7c9e05ef7c4095a5110bdf2a4f3, type: 3}
+      propertyPath: m_Materials.Array.size
+      value: 3
+      objectReference: {fileID: 0}
+    - target: {fileID: 2423421482342953178, guid: fa86a7c9e05ef7c4095a5110bdf2a4f3, type: 3}
+      propertyPath: 'm_Materials.Array.data[0]'
+      value: 
+      objectReference: {fileID: 2100000, guid: 49278e7082e78614e90aca03745bfab2, type: 2}
+    - target: {fileID: 2423421482342953178, guid: fa86a7c9e05ef7c4095a5110bdf2a4f3, type: 3}
+      propertyPath: 'm_Materials.Array.data[1]'
+      value: 
+      objectReference: {fileID: -876546973899608171, guid: 5274567a8cde93a43abcfb290f6f8f1b, type: 3}
+    - target: {fileID: 2423421482342953178, guid: fa86a7c9e05ef7c4095a5110bdf2a4f3, type: 3}
+      propertyPath: 'm_Materials.Array.data[2]'
+      value: 
+      objectReference: {fileID: 2100000, guid: 49278e7082e78614e90aca03745bfab2, type: 2}
     - target: {fileID: 3700889645025360494, guid: fa86a7c9e05ef7c4095a5110bdf2a4f3, type: 3}
       propertyPath: m_LocalPosition.x
       value: 0
