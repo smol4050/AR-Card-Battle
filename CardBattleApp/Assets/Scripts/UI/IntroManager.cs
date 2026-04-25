@@ -3,96 +3,175 @@ using UnityEngine.Video;
 using TMPro;
 using UnityEngine.UI;
 using UnityEngine.SceneManagement;
+using System.Collections;
+using UnityEngine.InputSystem; // Importante: Nueva librería
 
 public class IntroManager : MonoBehaviour
 {
     [Header("Configuración de Videos")]
     public VideoPlayer videoPlayer;
-    public VideoClip videoEvento; // Primer video
-    public VideoClip videoJuego;  // Segundo video
+    public VideoClip videoEvento;
+    public VideoClip videoJuego;
 
     [Header("Configuración de UI")]
     public GameObject panelInscripcion;
-    public TMP_InputField inputNombre;
-    public TMP_InputField inputApodo;
-    public TMP_InputField inputPersonaje;
-    public TMP_InputField inputEdad;
+    public CanvasGroup fadeCanvasGroup;
+    public TMP_InputField inputNombre, inputApodo, inputPersonaje, inputEdad;
     public Button btnInscribirse;
 
-    [Header("Configuración de Escena")]
-    public string nombreEscenaMenu = "MenuScene"; // Cambia esto por el nombre exacto de tu escena
+    [Header("Audio")]
+    public AudioSource bgmInscripcion;
+    public float fadeDuration = 1.0f;
 
-    private int faseVideo = 1; // 1 = Video Evento, 2 = Video Juego
+    [Header("Configuración de Escena")]
+    public string nombreEscenaMenu = "01_MainMenu";
+
+    private int faseVideo = 1;
+    private bool estaHaciendoFade = false;
 
     private void Start()
     {
-        // Configuraciones iniciales
         panelInscripcion.SetActive(false);
-        btnInscribirse.onClick.AddListener(AlDarClicInscribirse);
+        fadeCanvasGroup.alpha = 1;
+        bgmInscripcion.volume = 0;
+        bgmInscripcion.Stop();
 
-        // Nos suscribimos al evento que avisa cuando un video termina
+        btnInscribirse.onClick.AddListener(AlDarClicInscribirse);
         videoPlayer.loopPointReached += AlTerminarVideo;
 
-        // Reproducimos el primer video
+        StartCoroutine(FlujoInicial());
+    }
+
+    private void Update()
+    {
+        // SISTEMA DE SKIP (Nuevo Input System)
+        // Pointer.current.press detecta clics y toques por igual
+        if (Pointer.current != null && Pointer.current.press.wasPressedThisFrame && !estaHaciendoFade)
+        {
+            if (videoPlayer.isPlaying)
+            {
+                SaltarVideo();
+            }
+        }
+    }
+
+    private IEnumerator FlujoInicial()
+    {
         ReproducirVideo(videoEvento);
+        yield return StartCoroutine(Fade(0));
     }
 
     private void ReproducirVideo(VideoClip clip)
     {
         videoPlayer.clip = clip;
         videoPlayer.Play();
+        videoPlayer.SetDirectAudioVolume(0, 1);
+    }
+
+    private void SaltarVideo()
+    {
+        videoPlayer.Stop();
+        AlTerminarVideo(videoPlayer);
     }
 
     private void AlTerminarVideo(VideoPlayer vp)
     {
+        if (estaHaciendoFade) return;
+
         if (faseVideo == 1)
         {
-            // Termina el Video del Evento -> Mostramos el Panel
-            panelInscripcion.SetActive(true);
+            StartCoroutine(TransicionVideoAPanel());
         }
         else if (faseVideo == 2)
         {
-            // Termina el Video del Juego -> Pasamos al Menú
-            SceneManager.LoadScene(nombreEscenaMenu);
+            StartCoroutine(TransicionFinalAMenu());
         }
+    }
+
+    private IEnumerator TransicionVideoAPanel()
+    {
+        estaHaciendoFade = true;
+        yield return StartCoroutine(Fade(1, true));
+
+        panelInscripcion.SetActive(true);
+        bgmInscripcion.Play();
+
+        yield return StartCoroutine(Fade(0, false, true));
+        estaHaciendoFade = false;
     }
 
     private void AlDarClicInscribirse()
     {
-        // 1. Validar que los campos no estén vacíos (básico)
-        if (string.IsNullOrEmpty(inputNombre.text) || string.IsNullOrEmpty(inputApodo.text))
-        {
-            Debug.LogWarning("Faltan campos por llenar");
-            return; // Puedes mostrar un texto de error en la UI aquí si quieres
-        }
+        if (string.IsNullOrEmpty(inputNombre.text) || string.IsNullOrEmpty(inputApodo.text)) return;
 
-        // 2. Convertir la edad a número de forma segura
         int edadMela = 0;
         int.TryParse(inputEdad.text, out edadMela);
 
-        // 3. Crear el paquete de datos y asignar el ID de perfil random
         PlayerData nuevosDatos = new PlayerData();
         nuevosDatos.nombre = inputNombre.text;
         nuevosDatos.apodo = inputApodo.text;
         nuevosDatos.personajeFavorito = inputPersonaje.text;
         nuevosDatos.edad = edadMela;
-        nuevosDatos.idFotoPerfil = Random.Range(1, 4); // Genera 1, 2 o 3 al azar
+        nuevosDatos.idFotoPerfil = Random.Range(1, 4);
 
-        // 4. Guardar usando el Singleton
         SaveManager.Instance.GuardarDatos(nuevosDatos);
+        StartCoroutine(TransicionPanelAVideo2());
+    }
 
-        // 5. Ocultar panel y lanzar el segundo video
+    private IEnumerator TransicionPanelAVideo2()
+    {
+        estaHaciendoFade = true;
+        yield return StartCoroutine(Fade(1, false, true));
+
         panelInscripcion.SetActive(false);
+        bgmInscripcion.Stop();
+
         faseVideo = 2;
         ReproducirVideo(videoJuego);
+        yield return StartCoroutine(Fade(0));
+
+        estaHaciendoFade = false;
+    }
+
+    private IEnumerator TransicionFinalAMenu()
+    {
+        estaHaciendoFade = true;
+        yield return StartCoroutine(Fade(1, true));
+        SceneManager.LoadScene(nombreEscenaMenu);
+    }
+
+    private IEnumerator Fade(float targetAlpha, bool fadeVideoAudio = false, bool fadeBGM = false)
+    {
+        float startAlpha = fadeCanvasGroup.alpha;
+        float startBGMVol = bgmInscripcion.volume;
+        float startVideoVol = videoPlayer.GetDirectAudioVolume(0);
+        float time = 0;
+
+        while (time < fadeDuration)
+        {
+            time += Time.deltaTime;
+            float lerpVal = time / fadeDuration;
+
+            fadeCanvasGroup.alpha = Mathf.Lerp(startAlpha, targetAlpha, lerpVal);
+
+            if (fadeVideoAudio)
+            {
+                videoPlayer.SetDirectAudioVolume(0, Mathf.Lerp(startVideoVol, 1 - targetAlpha, lerpVal));
+            }
+
+            if (fadeBGM)
+            {
+                bgmInscripcion.volume = Mathf.Lerp(startBGMVol, 1 - targetAlpha, lerpVal);
+            }
+
+            yield return null;
+        }
+
+        fadeCanvasGroup.alpha = targetAlpha;
     }
 
     private void OnDestroy()
     {
-        // Buena práctica: desuscribirse de eventos al destruir el objeto para evitar errores de memoria
-        if (videoPlayer != null)
-        {
-            videoPlayer.loopPointReached -= AlTerminarVideo;
-        }
+        if (videoPlayer != null) videoPlayer.loopPointReached -= AlTerminarVideo;
     }
 }
