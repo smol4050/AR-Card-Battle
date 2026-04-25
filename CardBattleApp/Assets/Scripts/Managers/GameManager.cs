@@ -636,6 +636,13 @@ public class GameManager : MonoBehaviour
 
         OnPhaseChanged?.Invoke(currentPhase);
     }
-
+    /// <summary>
+    /// Dispara el evento OnUnitDied desde fuera del loop de combate.
+    /// Usado por ARDeployFlow para retirar visualmente una unidad recolocada.
+    /// </summary>
+    public void OnUnitDied_Internal(int playerId, Unit unit)
+    {
+        OnUnitDied?.Invoke(playerId, unit);
+    }
     public void LogMessage(int playerId, string msg) => OnLogMessage?.Invoke(playerId, msg);
 }
