@@ -1,8 +1,9 @@
-using UnityEngine;
 using Niantic.Lightship.SharedAR.Colocalization;
-using Unity.Netcode;
-using TMPro;
 using System.Xml.Serialization;
+using TMPro;
+using Unity.Netcode;
+using UnityEngine;
+using UnityEngine.XR.ARFoundation;
 
 [RequireComponent(typeof(SharedSpaceFactory))]
 public class ImageTrackingColocalizationManager : MonoBehaviour,IColocalizationRoom
@@ -13,6 +14,9 @@ public class ImageTrackingColocalizationManager : MonoBehaviour,IColocalizationR
     [SerializeField] private GameObject connectionUI;
     [SerializeField] private TMP_InputField pinInputField;
     [SerializeField] private TextMeshProUGUI pinText;
+
+    [SerializeField] private ARTrackedImageManager trackedImageManager;
+    [SerializeField] private cardScanner cardScanner;
 
     private SharedSpaceFactory sharedSpaceFactory;
     private bool startAsHost;
@@ -31,6 +35,7 @@ public class ImageTrackingColocalizationManager : MonoBehaviour,IColocalizationR
     void Start()
     {
         connectionUI.SetActive(true);
+        trackedImageManager.enabled = false;
     }
 
     public void StartNetworkAsHostOrClient(bool isHost)
@@ -53,7 +58,10 @@ public class ImageTrackingColocalizationManager : MonoBehaviour,IColocalizationR
 
     public void SharedSpaceStartTracking()
     {
-        if(startAsHost)
+        trackedImageManager.enabled = true;
+        cardScanner.sharedSpaceReady = true;
+
+        if (startAsHost)
         {
             StartHost();
         }
