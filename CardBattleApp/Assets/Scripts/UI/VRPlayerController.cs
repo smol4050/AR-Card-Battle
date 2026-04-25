@@ -1,12 +1,15 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
-//using UnityEngine.InputSystem.Sensors; // Necesario para el giroscopio nuevo
 
 public class VRPlayerController : MonoBehaviour
 {
     [Header("Configuración de Interacción")]
     public float interactDistance = 15f;
     public Transform reticle;
+
+    [Header("Ajustes del Giroscopio")]
+    [Range(1f, 20f)]
+    public float suavizado = 10f; // Mayor número = movimiento más rápido y nervioso. Menor = más suave.
 
     private GameObject cameraContainer;
     private IInteractable lastTarget;
@@ -18,16 +21,15 @@ public class VRPlayerController : MonoBehaviour
         cameraContainer.transform.position = transform.position;
         transform.SetParent(cameraContainer.transform);
 
-        // 2. Activar el Giroscopio en el New Input System
+        // 2. Activar el Sensor
         if (AttitudeSensor.current != null)
         {
             InputSystem.EnableDevice(AttitudeSensor.current);
-            Debug.Log("Giroscopio (Attitude Sensor) activado correctamente.");
         }
-        else
-        {
-            Debug.LogWarning("¡No se detectó un sensor de actitud (giroscopio) en este dispositivo!");
-        }
+
+        // 3. Compensación inicial para Landscape
+        // Giramos el contenedor para que el "frente" del sensor coincida con el horizonte
+        cameraContainer.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
     }
 
     void Update()
@@ -46,13 +48,22 @@ public class VRPlayerController : MonoBehaviour
 
     private void RotarCamaraGiroscopio()
     {
-        // Leemos los datos del giroscopio con el nuevo sistema
         if (AttitudeSensor.current != null)
         {
+            // Leemos la actitud (orientación) actual
             Quaternion q = AttitudeSensor.current.attitude.ReadValue();
 
-            // La misma conversión para que coincida con el mundo 3D de Unity
-            transform.localRotation = new Quaternion(q.x, q.y, -q.z, -q.w);
+            // Re-mapeo de ejes para que funcione en Landscape (Horizontal)
+            // Invertimos Z y W para corregir el "espejo" de Unity
+            Quaternion nuevaRotacion = new Quaternion(q.x, q.y, -q.z, -q.w);
+
+            // APLICAMOS SLERP: Esto es lo que quita el temblor. 
+            // Interpola suavemente entre la rotación actual y la nueva.
+            transform.localRotation = Quaternion.Slerp(
+                transform.localRotation,
+                nuevaRotacion,
+                Time.deltaTime * suavizado
+            );
         }
     }
 
@@ -64,7 +75,6 @@ public class VRPlayerController : MonoBehaviour
         if (Physics.Raycast(ray, out hit, interactDistance))
         {
             IInteractable interactable = hit.collider.GetComponent<IInteractable>();
-
             if (interactable != null)
             {
                 if (lastTarget != interactable)
@@ -72,25 +82,17 @@ public class VRPlayerController : MonoBehaviour
                     lastTarget?.OnHoverExit();
                     interactable.OnHoverEnter();
                     lastTarget = interactable;
-
                     if (reticle != null) reticle.localScale = Vector3.one * 1.5f;
                 }
 
-                // Detectar toque en la pantalla
                 if (Pointer.current != null && Pointer.current.press.wasPressedThisFrame)
                 {
                     interactable.Interact();
                 }
             }
-            else
-            {
-                LimpiarTarget();
-            }
+            else { LimpiarTarget(); }
         }
-        else
-        {
-            LimpiarTarget();
-        }
+        else { LimpiarTarget(); }
     }
 
     private void LimpiarTarget()

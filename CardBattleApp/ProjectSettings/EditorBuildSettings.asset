@@ -14,7 +14,7 @@ EditorBuildSettings:
   - enabled: 0
     path: Assets/Scenes/02_ARBattle.unity
     guid: af558cd3cae83d145b4ca334de2c9111
-  - enabled: 1
+  - enabled: 0
     path: Assets/Scenes/prueba_multijugador.unity
     guid: aec71c510ab45fc46b04aa2fd24ac076
   m_configObjects:
