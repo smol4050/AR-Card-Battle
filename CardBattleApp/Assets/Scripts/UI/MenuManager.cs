@@ -34,7 +34,7 @@ public class MenuManager : MonoBehaviour
 
     [Header("Flujo de Inicio (AR)")]
     public GameObject panelAvisoCamara; // El panel que explica por qué usaremos la cámara
-    public string nombreEscenaTutorial = "02_Tutorial"; // Asegúrate que se llame así en Build Settings
+    public string nombreEscenaTutorial = "01_02_Tutorial"; // Asegúrate que se llame así en Build Settings
 
     // Este método lo llamará el VRButton del Tablero
     public void IniciarProcesoDeEntrada()
