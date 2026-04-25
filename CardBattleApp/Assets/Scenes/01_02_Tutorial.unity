@@ -656,6 +656,20 @@ MonoBehaviour:
   cardPreviews:
   - cardId: 1
     previewPrefab: {fileID: 131249342222860835, guid: 572cdff338a9c5b4e983cae9734a5457, type: 3}
+  - cardId: 2
+    previewPrefab: {fileID: 131249342222860835, guid: 52f4c3521d3c43f468d8ee08a62b3d49, type: 3}
+  - cardId: 3
+    previewPrefab: {fileID: 131249342222860835, guid: c8f9dad992153b54d9143c7085afc743, type: 3}
+  - cardId: 4
+    previewPrefab: {fileID: 131249342222860835, guid: 33c3bc459c5ae194bb8c514611402f2d, type: 3}
+  - cardId: 5
+    previewPrefab: {fileID: 5958500295921118325, guid: 832715038b21ca4418e0cbfce8d8366d, type: 3}
+  - cardId: 6
+    previewPrefab: {fileID: 5958500295921118325, guid: e09945c28a64dd4418066d26d138b8ed, type: 3}
+  - cardId: 7
+    previewPrefab: {fileID: 5958500295921118325, guid: 2d63dab9db22458448421a0a7faa7f06, type: 3}
+  - cardId: 8
+    previewPrefab: {fileID: 131249342222860835, guid: 228c3d92a59795447bd57768ac6d869a, type: 3}
   offsetY: 0.08
   previewScale: 0.06
   rotationOffsetY: 0
