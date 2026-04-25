@@ -456,11 +456,13 @@ MonoBehaviour:
   aiController: {fileID: 1465123501}
   confirmPanel: {fileID: 1168893060}
   cardNameText: {fileID: 759735890}
-  energyText: {fileID: 0}
   statusText: {fileID: 0}
   logText: {fileID: 0}
   readyButton: {fileID: 1414950712}
   playerEnergyText: {fileID: 0}
+  slotLayerMask:
+    serializedVersion: 2
+    m_Bits: 8
 --- !u!114 &189021900
 MonoBehaviour:
   m_ObjectHideFlags: 0

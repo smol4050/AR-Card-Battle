@@ -5,11 +5,12 @@ TagManager:
   serializedVersion: 3
   tags:
   - WeaponVFX
+  - Cube
   layers:
   - Default
   - TransparentFX
   - Ignore Raycast
-  - 
+  - Slot Layer
   - Water
   - UI
   - 
