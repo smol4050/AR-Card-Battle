@@ -140,6 +140,7 @@ public class ARCardScanner : MonoBehaviour
         if (imageName == "Battlefield_Marker")
         {
             HandleBattlefieldMarker(position, rotation);
+
             return;
         }
 
