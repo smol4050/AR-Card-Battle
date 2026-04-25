@@ -103,9 +103,9 @@ MonoBehaviour:
       m_GuidLow: 5344987667736189460
       m_GuidHigh: 7011474531944284599
     m_SerializedTextureGuid:
-      m_GuidLow: 17056383899346869372
-      m_GuidHigh: 17647611638168055096
-    m_Size: {x: 0.53988284, y: 0.7557994}
+      m_GuidLow: 5666903076449505956
+      m_GuidHigh: 13050249368935609480
+    m_Size: {x: 0.53988284, y: 1.044617}
     m_SpecifySize: 1
     m_Name: Battlefield_Marker
-    m_Texture: {fileID: 2800000, guid: b1431c7c72c9ecb4386d0eab48e9e8f4, type: 3}
+    m_Texture: {fileID: 2800000, guid: d05752a4e2524ea48834ac69a8cc1bb5, type: 3}
