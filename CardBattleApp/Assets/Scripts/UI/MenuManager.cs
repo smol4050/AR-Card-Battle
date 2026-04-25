@@ -32,6 +32,44 @@ public class MenuManager : MonoBehaviour
         CerrarTodosLosPaneles();
     }
 
+    [Header("Flujo de Inicio (AR)")]
+    public GameObject panelAvisoCamara; // El panel que explica por qué usaremos la cámara
+    public string nombreEscenaTutorial = "01_02_Tutorial"; // Asegúrate que se llame así en Build Settings
+
+    // Este método lo llamará el VRButton del Tablero
+    public void IniciarProcesoDeEntrada()
+    {
+        CerrarTodosLosPaneles();
+        if (panelAvisoCamara != null)
+        {
+            panelAvisoCamara.SetActive(true);
+        }
+        else
+        {
+            // Si olvidaste poner el panel, salta directo al tutorial para no trabar el juego
+            ConfirmarAvisoYIrAlTutorial();
+        }
+    }
+
+    // Este método lo llamará el botón "ACEPTAR" dentro del panel de aviso
+    public void ConfirmarAvisoYIrAlTutorial()
+    {
+        if (panelAvisoCamara != null) panelAvisoCamara.SetActive(false);
+
+        // Usamos el LoadingManager "pro" que ya tenemos en el DontDestroyOnLoad
+        if (LoadingManager.Instance != null)
+        {
+            Debug.Log("Iniciando transición al Tutorial...");
+            LoadingManager.Instance.CargarEscena(nombreEscenaTutorial);
+        }
+        else
+        {
+            // Backup por si acaso el LoadingManager no está (para pruebas rápidas)
+            UnityEngine.SceneManagement.SceneManager.LoadScene(nombreEscenaTutorial);
+        }
+    }
+
+
     private void ConfigurarMundoAleatorio()
     {
         // Apagamos todos primero por seguridad
