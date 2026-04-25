@@ -53,7 +53,7 @@ public class cardScanner : MonoBehaviour
 
     void OnTrackedImagesChanged(ARTrackedImagesChangedEventArgs args)
     {
-        if (!sharedSpaceReady) return;
+        //if (!sharedSpaceReady) return;
 
         foreach (var trackedImage in args.added)
         {
