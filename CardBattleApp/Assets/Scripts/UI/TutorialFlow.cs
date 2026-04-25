@@ -1,7 +1,7 @@
 using UnityEngine;
 using System.Collections;
 
-public enum TutorialStep { ScanBoard, ScanCards, DeployUnit, FreePlay, ScanUnit}
+public enum TutorialStep { ScanBoard, ScanCards, DeployUnit, FreePlay, ScanUnit }
 
 public class TutorialFlowController : MonoBehaviour
 {
@@ -18,20 +18,15 @@ public class TutorialFlowController : MonoBehaviour
 
     private void Start()
     {
-        // 1. Forzar el estado inicial de la UI
         ActualizarUI(TutorialStep.ScanBoard);
 
         if (cardScanner != null)
         {
-            // 2. Suscribirse a los eventos para cambios futuros
             cardScanner.OnBattlefieldSpawned += HandleBoardDetected;
             cardScanner.OnCardScanned += HandleCardDetected;
 
-            // 3. ¡EL TRUCO! Si el tablero ya está listo (porque se detectó rápido),
-            // forzamos el paso al siguiente nivel de una vez.
             if (cardScanner.IsBattlefieldReady)
             {
-                Debug.Log("Tutorial: El tablero ya estaba listo antes de empezar. Saltando al paso 2.");
                 HandleBoardDetected(cardScanner.BoardRefs);
             }
         }
@@ -39,6 +34,36 @@ public class TutorialFlowController : MonoBehaviour
         if (gameManager != null)
         {
             gameManager.OnUnitSpawned += HandleUnitDeployed;
+        }
+    }
+
+    private void Update()
+    {
+        // --- DETECCIÓN DE TOQUE PARA AVANCE MANUAL ---
+        // Detecta toque en celular o click izquierdo en PC
+        if (Input.GetMouseButtonDown(0) || (Input.touchCount > 0 && Input.GetTouch(0).phase == TouchPhase.Began))
+        {
+            AvanceManualPorToque();
+        }
+    }
+
+    private void AvanceManualPorToque()
+    {
+        switch (currentStep)
+        {
+            case TutorialStep.ScanBoard:
+                Debug.Log("Tutorial: Avance manual al Paso 2 (Cartas)");
+                PasarAlSiguientePaso(TutorialStep.ScanCards);
+                break;
+            case TutorialStep.ScanCards:
+                Debug.Log("Tutorial: Avance manual al Paso 3 (Despliegue)");
+                PasarAlSiguientePaso(TutorialStep.DeployUnit);
+                break;
+            case TutorialStep.DeployUnit:
+                Debug.Log("Tutorial: Avance manual al Final (Modo Libre)");
+                PasarAlSiguientePaso(TutorialStep.FreePlay);
+                break;
+                // Si ya está en FreePlay, no hacemos nada para no romper el juego
         }
     }
 
@@ -55,14 +80,12 @@ public class TutorialFlowController : MonoBehaviour
         }
     }
 
-    // --- MANEJO DE EVENTOS ---
+    // --- MANEJO DE EVENTOS AUTOMÁTICOS ---
 
     private void HandleBoardDetected(BattlefieldReferences refs)
     {
-        // Solo avanzamos si estamos en el paso 1
         if (currentStep == TutorialStep.ScanBoard)
         {
-            Debug.Log("<color=cyan>Tutorial: Recibida señal de Tablero. Cambiando a Paso 2.</color>");
             PasarAlSiguientePaso(TutorialStep.ScanCards);
         }
     }
@@ -71,7 +94,6 @@ public class TutorialFlowController : MonoBehaviour
     {
         if (currentStep == TutorialStep.ScanCards)
         {
-            Debug.Log($"<color=cyan>Tutorial: Carta {card} detectada. Cambiando a Paso 3.</color>");
             PasarAlSiguientePaso(TutorialStep.DeployUnit);
         }
     }
@@ -80,7 +102,6 @@ public class TutorialFlowController : MonoBehaviour
     {
         if (currentStep == TutorialStep.DeployUnit && playerId == 0)
         {
-            Debug.Log("<color=green>Tutorial: ¡Unidad puesta! Fin del tutorial.</color>");
             PasarAlSiguientePaso(TutorialStep.FreePlay);
         }
     }
@@ -93,7 +114,6 @@ public class TutorialFlowController : MonoBehaviour
 
     private void ActualizarUI(TutorialStep step)
     {
-        // Aseguramos que los paneles existan antes de tocarlos
         if (panelPaso1) panelPaso1.SetActive(step == TutorialStep.ScanBoard);
         if (panelPaso2) panelPaso2.SetActive(step == TutorialStep.ScanCards);
         if (panelPaso3) panelPaso3.SetActive(step == TutorialStep.ScanUnit || step == TutorialStep.DeployUnit);
@@ -106,8 +126,8 @@ public class TutorialFlowController : MonoBehaviour
 
     private IEnumerator FinalizarTutorial()
     {
-        yield return new WaitForSeconds(3f);
-        // Aquí podrías apagar todos los paneles definitivamente
+        yield return new WaitForSeconds(2f);
         if (panelPaso3) panelPaso3.SetActive(false);
+        Debug.Log("<color=yellow>Tutorial Finalizado - Control total al jugador</color>");
     }
 }
