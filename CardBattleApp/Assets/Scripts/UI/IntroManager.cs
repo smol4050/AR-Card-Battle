@@ -136,8 +136,10 @@ public class IntroManager : MonoBehaviour
     private IEnumerator TransicionFinalAMenu()
     {
         estaHaciendoFade = true;
-        yield return StartCoroutine(Fade(1, true));
-        SceneManager.LoadScene(nombreEscenaMenu);
+        yield return StartCoroutine(Fade(1, true)); // Tu fade interno de la escena
+
+        // CAMBIO AQUÍ: Llamamos al LoadingManager
+        LoadingManager.Instance.CargarEscena(nombreEscenaMenu);
     }
 
     private IEnumerator Fade(float targetAlpha, bool fadeVideoAudio = false, bool fadeBGM = false)
