@@ -15,7 +15,7 @@ public class ImageTrackingColocalizationManager : MonoBehaviour,IColocalizationR
     [SerializeField] private TMP_InputField pinInputField;
     [SerializeField] private TextMeshProUGUI pinText;
 
-    [SerializeField] private ARTrackedImageManager trackedImageManager;
+    //[SerializeField] private ARTrackedImageManager trackedImageManager;
     [SerializeField] private cardScanner cardScanner;
 
     private SharedSpaceFactory sharedSpaceFactory;
@@ -35,7 +35,9 @@ public class ImageTrackingColocalizationManager : MonoBehaviour,IColocalizationR
     void Start()
     {
         connectionUI.SetActive(true);
-        trackedImageManager.enabled = false;
+        //trackedImageManager.enabled = false;
+        var managers = FindObjectsOfType<ARTrackedImageManager>();
+        Debug.Log("Managers encontrados: " + managers.Length);
     }
 
     public void StartNetworkAsHostOrClient(bool isHost)
@@ -54,11 +56,13 @@ public class ImageTrackingColocalizationManager : MonoBehaviour,IColocalizationR
         pinText.gameObject.SetActive(true);
         pinText.text = $"PIN: {roomName}";
         Debug.Log(roomName);
+
+        
     }
 
     public void SharedSpaceStartTracking()
     {
-        trackedImageManager.enabled = true;
+        //trackedImageManager.enabled = true;
         cardScanner.sharedSpaceReady = true;
 
         if (startAsHost)
