@@ -4,46 +4,48 @@ public class PlayerInputController : MonoBehaviour
 {
     [SerializeField] private GameManager gameManager;
 
-    // Para este prototipo local, definimos el coste y el ID de la carta que lanzará el botón
     private readonly int _baseCardCost = 1;
     private readonly CardID _baseCardId = CardID.SollarDuelist;
 
-    /// <summary>
-    /// Se llama cuando el jugador local presiona el botón de desplegar carta.
-    /// </summary>
+    [Header("Target Placement")]
+    public Transform targetSlot;
+    public int targetRow = 1;
+    public int targetSlotIndex = 4;
+
     public void OnDeployCardClicked()
     {
         int localPlayerId = 0;
         int currentEnergy = gameManager.players[localPlayerId].energy;
 
-        // Utilizamos nuestra regla estática aislada para validar la jugada
         if (!GameplayRules.CanPlayCard(gameManager.currentPhase, currentEnergy, _baseCardCost))
         {
             Debug.LogWarning("Input: Cannot play card. Wrong phase or not enough energy.");
             return;
         }
 
-        // Enviamos la petición usando la nueva firma (playerId, cardId, spawnPos, cost)
-        // Usamos una posición lógica (Ej: Y negativo para el lado del jugador)
-        bool success = gameManager.PlayCard(
-            localPlayerId,
-            _baseCardId,
-            new Vector2(0, -2f),
-            _baseCardCost
-        );
+        Vector2 spawnPos = new Vector2(0, -2f);
 
-        if (success)
+        if (targetSlot != null)
         {
-            Debug.Log($"Input: {_baseCardId} successfully deployed to the TFT board!");
+            // Extraemos la posición exacta considerando el BoxCollider si existe
+            BoxCollider col = targetSlot.GetComponent<BoxCollider>();
+            if (col != null)
+            {
+                spawnPos = new Vector2(targetSlot.localPosition.x + col.center.x, targetSlot.localPosition.z + col.center.z);
+            }
+            else
+            {
+                spawnPos = new Vector2(targetSlot.localPosition.x, targetSlot.localPosition.z);
+            }
         }
+
+        bool success = gameManager.PlayCard(localPlayerId, _baseCardId, spawnPos, targetRow, targetSlotIndex, _baseCardCost);
+
+        if (success) Debug.Log($"Input: {_baseCardId} deployed to slot {targetSlotIndex}!");
     }
 
-    /// <summary>
-    /// Se llama cuando el jugador presiona el botón "Ready".
-    /// </summary>
     public void OnReadyClicked()
     {
-        int localPlayerId = 0;
-        gameManager.SetPlayerReady(localPlayerId);
+        gameManager.SetPlayerReady(0);
     }
 }
