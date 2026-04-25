@@ -6,26 +6,27 @@ using System;
 public class ARCardScanner : MonoBehaviour
 {
     private ARTrackedImageManager _imageManager;
-    public ARPlacementManager placementManager; 
 
-    // Evento para avisarle a la UI qué carta se escaneó
+    [Header("Configuración del Tablero")]
+    public GameObject battlefieldPrefab;
+    private GameObject spawnedBattlefield;
+
+    // Evento para avisarle a la UI (ARDeployFlow) qué carta se escaneó
     public event Action<CardID> OnCardScanned;
 
     private void Awake() => _imageManager = GetComponent<ARTrackedImageManager>();
 
-    // ACTUALIZACIÓN UNITY 6: Usar trackablesChanged en lugar de trackedImagesChanged
-    private void OnEnable() => _imageManager.trackablesChanged += OnTrackablesChanged;
-    private void OnDisable() => _imageManager.trackablesChanged -= OnTrackablesChanged;
+    // SOLUCIÓN UNITY 6: Usar la sintaxis de UnityEvent (AddListener/RemoveListener)
+    private void OnEnable() => _imageManager.trackablesChanged.AddListener(OnTrackablesChanged);
+    private void OnDisable() => _imageManager.trackablesChanged.RemoveListener(OnTrackablesChanged);
 
     private void OnTrackablesChanged(ARTrackablesChangedEventArgs<ARTrackedImage> args)
     {
-        // Imágenes detectadas por primera vez
         foreach (var trackedImage in args.added)
         {
             ProcessScannedImage(trackedImage);
         }
-        
-        // Imágenes que el sistema sigue viendo o recuperó el tracking
+
         foreach (var trackedImage in args.updated)
         {
             if (trackedImage.trackingState == UnityEngine.XR.ARSubsystems.TrackingState.Tracking)
@@ -35,16 +36,36 @@ public class ARCardScanner : MonoBehaviour
 
     private void ProcessScannedImage(ARTrackedImage trackedImage)
     {
+        // Extraemos los datos puros y se los pasamos a la capa de lógica de negocio
         string imageName = trackedImage.referenceImage.name;
+        ProcessScannedImageString(imageName, trackedImage.transform.position, trackedImage.transform.rotation);
+    }
 
-        // 1. ¿Es el marcador del tablero?
-        if (imageName == "Battlefield_Marker" && !placementManager.isPlaced)
+    /// <summary>
+    /// Método desacoplado del hardware AR para permitir Pruebas Unitarias.
+    /// </summary>
+    public void ProcessScannedImageString(string imageName, Vector3 position, Quaternion rotation)
+    {
+        if (imageName == "Battlefield_Marker")
         {
-            placementManager.PlaceBattlefield(trackedImage.transform.position, trackedImage.transform.rotation);
+            if (spawnedBattlefield == null)
+            {
+                spawnedBattlefield = Instantiate(battlefieldPrefab, position, rotation);
+
+                // ¡NUEVA LÍNEA! Inyectamos las referencias dinámicas al VisualController
+                FindAnyObjectByType<VisualController>().RegisterBattlefield(spawnedBattlefield.GetComponent<BattlefieldReferences>());
+
+                Debug.Log("<color=green>Tablero desplegado con éxito en el marcador.</color>");
+            }
+            else
+            {
+                spawnedBattlefield.transform.position = position;
+                spawnedBattlefield.transform.rotation = rotation;
+            }
             return;
         }
 
-        // 2. ¿Es una carta de unidad? Mapeamos el string de la imagen al Enum CardID
+        // 2. Escanear cartas de unidad (Convierte el nombre de la imagen al Enum)
         if (Enum.TryParse(imageName, out CardID scannedCard))
         {
             OnCardScanned?.Invoke(scannedCard);

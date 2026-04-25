@@ -10,7 +10,7 @@ public class VisualController : MonoBehaviour
 
     [Header("Sollar Prefabs — Unidades")]
     public GameObject prefabSollarDuelist;
-    public GameObject prefabSollarForce;      // SOL-9
+    public GameObject prefabSollarForce;
     public GameObject prefabSollarCommander;
 
     [Header("Void Prefabs — Unidades")]
@@ -18,53 +18,25 @@ public class VisualController : MonoBehaviour
     public GameObject prefabVoidCommander;
     public GameObject prefabVoidHeavyShooter;
 
-    [Header("Naves - Setup P0")]
-    public Transform p0ShipEntryPoint;       // Punto X donde aparece
-    public Transform p0ShipBoardPoint;       // Punto donde se posiciona para la batalla
-    public Transform p0ShipConvergencePoint; // Punto donde se une la energía
-    public Transform[] p0ShipPatrolPoints;   // Puntos por donde se mueve en combate
-
-    [Header("Naves - Setup P1")]
-    public Transform p1ShipEntryPoint;
-    public Transform p1ShipBoardPoint;
-    public Transform p1ShipConvergencePoint;
-    public Transform[] p1ShipPatrolPoints;
-
     [Header("Ship Prefabs")]
-    public GameObject prefabSolarVanguard;    // nave Sollar (posee múltiples shootPoints)
-    public GameObject prefabAbyssReaper;      // nave Void
+    public GameObject prefabSolarVanguard;
+    public GameObject prefabAbyssReaper;
 
     [Header("VFX Prefabs")]
     public GameObject prefabVoidBullet;
     public GameObject prefabSollarBullet;
-    public GameObject prefabAbyssPulse;       // VFX del pulso de la nave Void
-    public GameObject prefabSolarBlast;       // VFX del impacto de la nave Sollar
+    public GameObject prefabAbyssPulse;
+    public GameObject prefabSolarBlast;
     public GameObject prefabStaggerFX;
     public GameObject prefabBurnFX;
-
-    [Header("Áreas Base")]
-    public Transform p0BoardArea;
-    public Transform p1BoardArea;
-
-    [Header("Slots P0")]
-    public Transform[] p0FrontSlots = new Transform[3];
-    public Transform[] p0BackSlots = new Transform[3];
-
-    [Header("Slots P1")]
-    public Transform[] p1FrontSlots = new Transform[3];
-    public Transform[] p1BackSlots = new Transform[3];
-
-    [Header("Posiciones de spawn de nave")]
-    [Tooltip("Punto donde aparece la nave del jugador 0")]
-    public Transform p0ShipSpawnPoint;
-    [Tooltip("Punto donde aparece la nave del jugador 1")]
-    public Transform p1ShipSpawnPoint;
 
     [Header("Configuración")]
     public float deathDestroyDelay = 2.5f;
     public float hitParticlesDuration = 0.6f;
 
-    // Parámetros de Animator (deben coincidir con los AnimatorControllers de los prefabs)
+    // Referencia dinámica al tablero instanciado en AR
+    private BattlefieldReferences _board;
+
     private static readonly int ANIM_VELOCIDAD = Animator.StringToHash("Velocidad");
     private static readonly int ANIM_ATACAR = Animator.StringToHash("Atacar");
     private static readonly int ANIM_NUM_ATAQUE = Animator.StringToHash("NumAtaque");
@@ -72,6 +44,16 @@ public class VisualController : MonoBehaviour
 
     private Dictionary<Unit, GameObject> _visualUnits = new Dictionary<Unit, GameObject>();
     private Dictionary<ShipInstance, GameObject> _visualShips = new Dictionary<ShipInstance, GameObject>();
+
+    // ─── INYECCIÓN DE DEPENDENCIA ─────────────────────────────────────────────
+    /// <summary>
+    /// Se llama cuando el tablero AR se instancia en el mundo físico.
+    /// </summary>
+    public void RegisterBattlefield(BattlefieldReferences spawnedBoard)
+    {
+        _board = spawnedBoard;
+        Debug.Log("<color=green>VisualController: Tablero dinámico registrado correctamente.</color>");
+    }
 
     // ─── SUSCRIPCIÓN ──────────────────────────────────────────────────────────
     private void OnEnable()
@@ -102,11 +84,13 @@ public class VisualController : MonoBehaviour
     // ─── SPAWN DE UNIDAD ──────────────────────────────────────────────────────
     private void HandleUnitSpawned(int playerId, Unit unitData)
     {
+        if (_board == null) { Debug.LogError("VisualController: No hay tablero registrado."); return; }
+
         GameObject prefab = GetUnitPrefab(unitData.cardId);
         if (prefab == null) return;
 
         Vector3 worldPos = GetSlotWorldPos(playerId, unitData.row, unitData.slotIndex);
-        Transform boardArea = (playerId == 0) ? p0BoardArea : p1BoardArea;
+        Transform boardArea = (playerId == 0) ? _board.p0BoardArea : _board.p1BoardArea;
 
         GameObject go = Instantiate(prefab, worldPos, boardArea.rotation);
 
@@ -119,8 +103,6 @@ public class VisualController : MonoBehaviour
         NavMeshAgent agent = go.GetComponent<NavMeshAgent>();
         if (agent != null)
         {
-            // Seguridad: Apagamos el agente, movemos el objeto y lo volvemos a prender
-            // Esto fuerza a Unity a recalcular el anclaje al NavMesh correctamente.
             agent.enabled = false;
             go.transform.position = worldPos;
             agent.enabled = true;
@@ -141,10 +123,12 @@ public class VisualController : MonoBehaviour
 
     private Vector3 GetSlotWorldPos(int playerId, int row, int slotIndex)
     {
+        if (_board == null) return Vector3.zero;
+
         if (playerId == 0)
-            return (row == 0) ? p0FrontSlots[slotIndex].position : p0BackSlots[slotIndex - 3].position;
+            return (row == 0) ? _board.p0FrontSlots[slotIndex].position : _board.p0BackSlots[slotIndex - 3].position;
         else
-            return (row == 0) ? p1FrontSlots[slotIndex].position : p1BackSlots[slotIndex - 3].position;
+            return (row == 0) ? _board.p1FrontSlots[slotIndex].position : _board.p1BackSlots[slotIndex - 3].position;
     }
 
     private GameObject GetUnitPrefab(CardID id)
@@ -168,7 +152,6 @@ public class VisualController : MonoBehaviour
         _visualUnits.Remove(unit);
         if (go == null) return;
 
-        // Desactivar NavMeshAgent para que no interfiera con la animación de muerte
         NavMeshAgent agent = go.GetComponent<NavMeshAgent>();
         if (agent != null) agent.enabled = false;
 
@@ -187,19 +170,20 @@ public class VisualController : MonoBehaviour
     // ─── SPAWN Y EXPIRACIÓN DE NAVE ───────────────────────────────────────────
     private void HandleShipSpawned(int ownerId, ShipInstance ship)
     {
+        if (_board == null) return;
+
         GameObject prefab = (ship.cardId == CardID.SolarVanguard) ? prefabSolarVanguard : prefabAbyssReaper;
         if (prefab == null) return;
 
-        Transform entryPoint = (ownerId == 0) ? p0ShipEntryPoint : p1ShipEntryPoint;
-        Transform boardPoint = (ownerId == 0) ? p0ShipBoardPoint : p1ShipBoardPoint;
-        Transform[] patrolPoints = (ownerId == 0) ? p0ShipPatrolPoints : p1ShipPatrolPoints;
+        Transform entryPoint = (ownerId == 0) ? _board.p0ShipEntryPoint : _board.p1ShipEntryPoint;
+        Transform boardPoint = (ownerId == 0) ? _board.p0ShipBoardPoint : _board.p1ShipBoardPoint;
+        Transform[] patrolPoints = (ownerId == 0) ? _board.p0ShipPatrolPoints : _board.p1ShipPatrolPoints;
 
         if (entryPoint == null || boardPoint == null) return;
 
         GameObject go = Instantiate(prefab, entryPoint.position, entryPoint.rotation);
         _visualShips[ship] = go;
 
-        // Iniciar secuencia completa: Entrar -> Patrullar
         StartCoroutine(AnimateShipEntryAndPatrol(go, entryPoint.position, boardPoint.position, patrolPoints));
     }
 
@@ -212,25 +196,21 @@ public class VisualController : MonoBehaviour
 
     private IEnumerator AnimateShipEntryAndPatrol(GameObject shipGo, Vector3 startPos, Vector3 boardPos, Transform[] patrolPoints)
     {
-        // 1. Animación de entrada
         float elapsed = 0f, dur = 1.5f;
         while (elapsed < dur && shipGo != null)
         {
             elapsed += Time.deltaTime;
-            // Usar una curva de interpolación suave (Ease-Out)
             float t = 1f - Mathf.Pow(1f - (elapsed / dur), 3f);
             shipGo.transform.position = Vector3.Lerp(startPos, boardPos, t);
             yield return null;
         }
 
-        // 2. Patrullaje en combate
         if (patrolPoints == null || patrolPoints.Length == 0) yield break;
 
         int currentPatrolIndex = 0;
         while (shipGo != null)
         {
             Vector3 targetPatrol = patrolPoints[currentPatrolIndex].position;
-            // Moverse hacia el punto de patrullaje lentamente
             shipGo.transform.position = Vector3.MoveTowards(shipGo.transform.position, targetPatrol, 1.5f * Time.deltaTime);
 
             if (Vector3.Distance(shipGo.transform.position, targetPatrol) < 0.1f)
@@ -259,10 +239,11 @@ public class VisualController : MonoBehaviour
     // ─── PULSO DE NAVE ────────────────────────────────────────────────────────
     private void HandleShipPulseFired(int ownerId, ShipInstance ship, int pulseIndex, List<Unit> targetsHit)
     {
+        if (_board == null) return;
         if (!_visualShips.TryGetValue(ship, out GameObject shipGo) || shipGo == null) return;
 
         Transform[] shootPoints = GetShipShootPoints(shipGo);
-        Transform convergencePoint = (ownerId == 0) ? p0ShipConvergencePoint : p1ShipConvergencePoint;
+        Transform convergencePoint = (ownerId == 0) ? _board.p0ShipConvergencePoint : _board.p1ShipConvergencePoint;
 
         if (ship.cardId == CardID.SolarVanguard)
             StartCoroutine(FireConvergingBarrage(shootPoints, convergencePoint, targetsHit, prefabSollarBullet, prefabSolarBlast));
@@ -274,7 +255,6 @@ public class VisualController : MonoBehaviour
     {
         if (convergencePoint == null || projectilePrefab == null) yield break;
 
-        // Fase 1: Energía desde los puntos de disparo de la nave hasta el punto de convergencia
         List<GameObject> chargeParticles = new List<GameObject>();
         foreach (Transform sp in shootPoints)
         {
@@ -297,20 +277,17 @@ public class VisualController : MonoBehaviour
             yield return null;
         }
 
-        // Limpiar partículas de carga
         foreach (var p in chargeParticles) if (p != null) Destroy(p);
 
-        // Opcional: Pequeña explosión en el punto de convergencia antes de disparar
         if (blastPrefab != null) Instantiate(blastPrefab, convergencePoint.position, Quaternion.identity);
 
-        // Fase 2: Disparar desde el punto de convergencia hacia los objetivos
         foreach (Unit target in targets)
         {
             if (_visualUnits.TryGetValue(target, out GameObject defObj) && defObj != null)
             {
                 StartCoroutine(AnimateProjectile(convergencePoint.position, defObj.transform.position + Vector3.up, projectilePrefab, blastPrefab));
             }
-            yield return new WaitForSeconds(0.05f); // Micro-retraso para un efecto ametralladora
+            yield return new WaitForSeconds(0.05f);
         }
     }
 
@@ -330,8 +307,6 @@ public class VisualController : MonoBehaviour
         if (impactPrefab != null) Instantiate(impactPrefab, end, Quaternion.identity);
     }
 
-    // Recoge todos los hijos del prefab de nave con el tag "ShootPoint"
-    // El prefab debe tener esos objetos etiquetados correctamente.
     private Transform[] GetShipShootPoints(GameObject shipGo)
     {
         List<Transform> points = new List<Transform>();
@@ -339,70 +314,8 @@ public class VisualController : MonoBehaviour
             if (child.CompareTag("ShootPoint"))
                 points.Add(child);
 
-        // Si no hay ninguno etiquetado, usamos el root como fallback
         if (points.Count == 0) points.Add(shipGo.transform);
         return points.ToArray();
-    }
-
-    // Solar Vanguard: dispara un proyectil desde cada shootPoint hacia los objetivos,
-    // repartiendo los targets entre los puntos disponibles.
-    private IEnumerator FireSolarVanguardBarrage(
-        GameObject shipGo, Transform[] shootPoints, List<Unit> targets)
-    {
-        if (targets.Count == 0) yield break;
-
-        for (int i = 0; i < targets.Count; i++)
-        {
-            Unit target = targets[i];
-            Transform from = shootPoints[i % shootPoints.Length];
-
-            if (!_visualUnits.TryGetValue(target, out GameObject defObj) || defObj == null) continue;
-
-            GameObject bulletPrefab = prefabSollarBullet != null ? prefabSollarBullet : prefabVoidBullet;
-            if (bulletPrefab == null) continue;
-
-            // Lanzamos cada proyectil en paralelo (sin yield entre ellos)
-            StartCoroutine(AnimateShipProjectile(from.position,
-                defObj.transform.position + Vector3.up,
-                bulletPrefab, prefabSolarBlast));
-
-            // Pequeño escalonamiento visual (no lógico — el daño ya se aplicó)
-            yield return new WaitForSeconds(0.05f);
-        }
-    }
-
-    // Abyss Reaper: onda expansiva desde la posición de la nave
-    private IEnumerator FireAbyssReaperPulse(GameObject shipGo, List<Unit> targets)
-    {
-        if (prefabAbyssPulse != null)
-            Instantiate(prefabAbyssPulse, shipGo.transform.position, Quaternion.identity);
-
-        // Efecto de impacto en cada unidad afectada
-        foreach (Unit target in targets)
-        {
-            if (_visualUnits.TryGetValue(target, out GameObject defObj) && defObj != null)
-                PlayHitParticles(defObj);
-        }
-        yield break;
-    }
-
-    private IEnumerator AnimateShipProjectile(
-        Vector3 start, Vector3 end, GameObject bulletPrefab, GameObject impactPrefab)
-    {
-        GameObject bullet = Instantiate(bulletPrefab, start, Quaternion.identity);
-        bullet.transform.LookAt(end);
-
-        float t = 0f, dur = 0.12f;
-        while (t < dur && bullet != null)
-        {
-            t += Time.deltaTime;
-            bullet.transform.position = Vector3.Lerp(start, end, t / dur);
-            yield return null;
-        }
-        if (bullet != null) Destroy(bullet);
-
-        if (impactPrefab != null)
-            Instantiate(impactPrefab, end, Quaternion.identity);
     }
 
     // ─── ATAQUE BÁSICO ────────────────────────────────────────────────────────
@@ -411,7 +324,6 @@ public class VisualController : MonoBehaviour
         if (!_visualUnits.TryGetValue(attacker, out GameObject attObj) || attObj == null) return;
         if (!_visualUnits.TryGetValue(target, out GameObject defObj) || defObj == null) return;
 
-        // Orientar hacia el objetivo
         Vector3 targetPos = defObj.transform.position;
         attObj.transform.LookAt(new Vector3(targetPos.x, attObj.transform.position.y, targetPos.z));
 
@@ -441,7 +353,6 @@ public class VisualController : MonoBehaviour
         NavMeshAgent agent = attObj.GetComponent<NavMeshAgent>();
         Animator anim = attObj.GetComponent<Animator>();
 
-        // Si no hay agente o falló al anclarse al NavMesh, usamos el fallback
         if (agent == null || !agent.isOnNavMesh)
         {
             yield return StartCoroutine(FallbackMeleeWalk(attObj, defObj, onImpact));
@@ -456,10 +367,8 @@ public class VisualController : MonoBehaviour
         agent.SetDestination(combatPos);
         anim?.SetFloat(ANIM_VELOCIDAD, 1f);
 
-        // Esperar un frame para que el agente calcule el path y evite el error de GetRemainingDistance
         yield return null;
 
-        // Añadida la validación agent.isOnNavMesh dentro del bucle
         while (attObj != null && agent != null && agent.isOnNavMesh &&
                !agent.pathPending && agent.remainingDistance > agent.stoppingDistance + 0.05f)
         {
@@ -494,7 +403,7 @@ public class VisualController : MonoBehaviour
         if (attObj != null) attObj.transform.position = combatPos;
     }
 
-    // ─── MOVIMIENTO RANGED CON NAVMESH (Actualizado) ──────────────────────────
+    // ─── MOVIMIENTO RANGED CON NAVMESH ──────────────────────────────────────────
     private IEnumerator NavMeshWalkToRangeAndShoot(
         Unit attackerData, GameObject attObj, GameObject defObj, float range, Action onImpact)
     {
@@ -517,7 +426,6 @@ public class VisualController : MonoBehaviour
         agent.SetDestination(combatPos);
         anim?.SetFloat(ANIM_VELOCIDAD, 1f);
 
-        // Esperar un frame
         yield return null;
 
         while (attObj != null && agent != null && agent.isOnNavMesh &&
@@ -610,13 +518,11 @@ public class VisualController : MonoBehaviour
         }
         if (bullet != null) Destroy(bullet);
 
-        // ── IMPACTO ───────────────────────────────────────────────────────────
         onImpact?.Invoke();
 
         if (targetObj != null)
         {
             PlayHitParticles(targetObj);
-            // Stagger FX en el segundo proyectil (cuando se activa)
             if (projIndex == 1 && prefabStaggerFX != null && targetData.stunTimer > 0)
                 Instantiate(prefabStaggerFX, targetObj.transform.position + Vector3.up, Quaternion.identity);
         }
