@@ -2,12 +2,6 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 
-/// <summary>
-/// Gestiona el flujo de despliegue del jugador 0 (Sollar) en AR:
-///  1. Espera a que el tablero esté listo.
-///  2. Permite escanear y colocar cartas Sollar en los slots.
-///  3. Cuando el jugador pulsa "Listo", la IA despliega su bando y comienza la batalla.
-/// </summary>
 public class ARDeployFlow : MonoBehaviour
 {
     [Header("Referencias de sistema")]

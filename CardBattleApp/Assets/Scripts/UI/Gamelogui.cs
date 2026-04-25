@@ -2,15 +2,6 @@ using UnityEngine;
 using TMPro;
 using UnityEngine.UI;
 
-/// <summary>
-/// Conecta el evento OnLogMessage del GameManager con un TextMeshProUGUI.
-/// Opcionalmente hace auto-scroll si hay un ScrollRect asignado.
-/// 
-/// Setup en Unity:
-///   1. Añade este componente a cualquier GameObject de UI.
-///   2. Asigna gameManager, logText y (opcional) scrollRect en el Inspector.
-///   3. Ajusta maxLines si quieres limitar el historial visible.
-/// </summary>
 public class GameLogUI : MonoBehaviour
 {
     [Header("Referencias")]
