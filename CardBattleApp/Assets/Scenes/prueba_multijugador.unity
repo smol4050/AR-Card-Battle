@@ -569,7 +569,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!224 &784334361
 RectTransform:
   m_ObjectHideFlags: 0
@@ -926,8 +926,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e391bfc5606be4e4e8846158bc1a4fe6, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SharedSpaceFactory
-  sharedSpaceManager: {fileID: 0}
-  roomOriginPrefab: {fileID: 0}
+  sharedSpaceManager: {fileID: 870406849}
+  roomOriginPrefab: {fileID: 9131141835518099997, guid: 1c338395ac62c4cff9d1e1411a806c0f, type: 3}
   roomName: 000
   capacity: 10
   description: XR Adventure Room
@@ -1633,7 +1633,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!224 &1655850841
 RectTransform:
   m_ObjectHideFlags: 0
