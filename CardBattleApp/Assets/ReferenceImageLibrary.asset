@@ -1,0 +1,119 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 848409ee8ba454f42a5ddff137688a27, type: 3}
+  m_Name: ReferenceImageLibrary
+  m_EditorClassIdentifier: Unity.XR.ARSubsystems::UnityEngine.XR.ARSubsystems.XRReferenceImageLibrary
+  m_GuidLow: 5499203578883936868
+  m_GuidHigh: 12888648137028533137
+  m_DataStore:
+    m_Storage: []
+  m_Images:
+  - m_SerializedGuid:
+      m_GuidLow: 4945164607400435530
+      m_GuidHigh: 5304051311174144674
+    m_SerializedTextureGuid:
+      m_GuidLow: 12651765272310258274
+      m_GuidHigh: 13513929427090358763
+    m_Size: {x: 0, y: 0}
+    m_SpecifySize: 0
+    m_Name: SollarDuelist
+    m_Texture: {fileID: 0}
+  - m_SerializedGuid:
+      m_GuidLow: 5622536334454283607
+      m_GuidHigh: 17247399756462997423
+    m_SerializedTextureGuid:
+      m_GuidLow: 7769929446456379222
+      m_GuidHigh: 5586896180785611592
+    m_Size: {x: 0, y: 0}
+    m_SpecifySize: 0
+    m_Name: Frame 22
+    m_Texture: {fileID: 0}
+  - m_SerializedGuid:
+      m_GuidLow: 4655115467403711115
+      m_GuidHigh: 14584651401343214231
+    m_SerializedTextureGuid:
+      m_GuidLow: 222048865743607186
+      m_GuidHigh: 11971118660330564123
+    m_Size: {x: 0, y: 0}
+    m_SpecifySize: 0
+    m_Name: VoidHorde
+    m_Texture: {fileID: 0}
+  - m_SerializedGuid:
+      m_GuidLow: 5626614434409839085
+      m_GuidHigh: 8066419626070766997
+    m_SerializedTextureGuid:
+      m_GuidLow: 7689050552496524579
+      m_GuidHigh: 3301046786085671435
+    m_Size: {x: 0, y: 0}
+    m_SpecifySize: 0
+    m_Name: SollarCommander
+    m_Texture: {fileID: 0}
+  - m_SerializedGuid:
+      m_GuidLow: 5451189147967446470
+      m_GuidHigh: 5582798732404911768
+    m_SerializedTextureGuid:
+      m_GuidLow: 9364369112388663640
+      m_GuidHigh: 12389503909585386570
+    m_Size: {x: 0, y: 0}
+    m_SpecifySize: 0
+    m_Name: SollarForce
+    m_Texture: {fileID: 0}
+  - m_SerializedGuid:
+      m_GuidLow: 5115726124957931181
+      m_GuidHigh: 5131627366183743413
+    m_SerializedTextureGuid:
+      m_GuidLow: 10172870057932628
+      m_GuidHigh: 967307722402644810
+    m_Size: {x: 0, y: 0}
+    m_SpecifySize: 0
+    m_Name: VoidCommander
+    m_Texture: {fileID: 0}
+  - m_SerializedGuid:
+      m_GuidLow: 4775039790207295317
+      m_GuidHigh: 186820112578741174
+    m_SerializedTextureGuid:
+      m_GuidLow: 3599517810800421162
+      m_GuidHigh: 1484557685907654442
+    m_Size: {x: 0, y: 0}
+    m_SpecifySize: 0
+    m_Name: VoidHeavyShooter
+    m_Texture: {fileID: 0}
+  - m_SerializedGuid:
+      m_GuidLow: 4889705779187430988
+      m_GuidHigh: 7480158465496830650
+    m_SerializedTextureGuid:
+      m_GuidLow: 2644971969724652272
+      m_GuidHigh: 7066341496427223146
+    m_Size: {x: 0, y: 0}
+    m_SpecifySize: 0
+    m_Name: SolarVanguard
+    m_Texture: {fileID: 0}
+  - m_SerializedGuid:
+      m_GuidLow: 4903459375194344835
+      m_GuidHigh: 12371329035836731809
+    m_SerializedTextureGuid:
+      m_GuidLow: 5437129194662538818
+      m_GuidHigh: 8116250564669876026
+    m_Size: {x: 0, y: 0}
+    m_SpecifySize: 0
+    m_Name: AbyssReaper
+    m_Texture: {fileID: 0}
+  - m_SerializedGuid:
+      m_GuidLow: 5219188365142007512
+      m_GuidHigh: 8053331536024149634
+    m_SerializedTextureGuid:
+      m_GuidLow: 8409595476295825944
+      m_GuidHigh: 9002566262683267515
+    m_Size: {x: 0, y: 0}
+    m_SpecifySize: 0
+    m_Name: Battlefield_Marker
+    m_Texture: {fileID: 0}
