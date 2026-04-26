@@ -94,7 +94,17 @@ public class ARDeployFlow : MonoBehaviour
         if (statusText != null) statusText.gameObject.SetActive(isVisible);
         if (logText != null) logText.gameObject.SetActive(isVisible);
         if (playerEnergyText != null) playerEnergyText.gameObject.SetActive(isVisible);
-        if (readyButton != null) readyButton.gameObject.SetActive(isVisible);
+
+        if (readyButton != null)
+        {
+            readyButton.gameObject.SetActive(isVisible);
+
+            // FORZAR REACTIVACIÓN: Si la UI es visible y la batalla no ha empezado, asegurar que se puede hacer clic
+            if (isVisible && _battlefieldReady && !_playerDeclaredReady)
+            {
+                readyButton.interactable = true;
+            }
+        }
     }
 
     // ─── TABLERO LISTO ────────────────────────────────────────────────────────
@@ -130,15 +140,24 @@ public class ARDeployFlow : MonoBehaviour
 
         if (_isWaitingForSlot)
         {
-            SetStatus("Toca un slot primero, o cancela la carta actual.");
-            return;
+            // FIX DE MÚLTIPLES CARTAS: Si ya colocó una carta, la fijamos y permitimos escanear la nueva.
+            if (_lastPlacedSlot != -1)
+            {
+                _isWaitingForSlot = false;
+            }
+            else
+            {
+                SetStatus("Toca un slot primero, o cancela la carta actual.");
+                return;
+            }
         }
 
+        // Limpiamos la memoria del slot anterior para que la nueva carta no intente borrar la vieja
         _lastPlacedSlot = -1;
         _lastPlacedCardId = CardID.None;
         _pendingCard = cardId;
-        int cost = GetCardCost(cardId);
 
+        int cost = GetCardCost(cardId);
         if (cardNameText != null) cardNameText.text = $"¿Desplegar {cardId}?\nCosto: {cost} Energía";
 
         // Mostrar panel de confirmación y ocultar la UI principal
@@ -165,7 +184,6 @@ public class ARDeployFlow : MonoBehaviour
         if (confirmPanel != null) confirmPanel.SetActive(false);
         _isWaitingForSlot = true;
 
-        // Recuperar la UI principal
         ToggleMainUI(true);
         ToggleSlotHighlights(true);
 
@@ -182,7 +200,6 @@ public class ARDeployFlow : MonoBehaviour
 
         if (confirmPanel != null) confirmPanel.SetActive(false);
 
-        // Recuperar la UI principal
         ToggleMainUI(true);
         SetStatus("Escanea una carta para desplegarla.");
     }
@@ -197,7 +214,7 @@ public class ARDeployFlow : MonoBehaviour
         if (readyButton != null) readyButton.interactable = false;
         if (confirmPanel != null) confirmPanel.SetActive(false);
 
-        ToggleMainUI(true); // Asegurar que log y status estén visibles para la batalla
+        ToggleMainUI(true);
 
         _pendingCard = CardID.None; _isWaitingForSlot = false;
         _lastPlacedSlot = -1; _lastPlacedCardId = CardID.None;
@@ -284,7 +301,9 @@ public class ARDeployFlow : MonoBehaviour
             _lastPlacedSlot = slot.slotIndex;
             _lastPlacedCardId = _pendingCard;
             RefreshEnergyUI();
-            SetStatus($"<color=lime>{_pendingCard} en slot {slot.slotIndex}. Toca otro para mover o pulsa Listo.</color>");
+
+            // Actualizamos el texto para indicar al usuario sus opciones
+            SetStatus($"<color=lime>{_pendingCard} en slot {slot.slotIndex}. Puedes moverla, escanear OTRA o pulsar Listo.</color>");
 
             ToggleSlotHighlights(false);
             OnUnitPlaced?.Invoke();
