@@ -286,7 +286,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 60, y: 597}
+  m_AnchoredPosition: {x: 42, y: 481.45}
   m_SizeDelta: {x: 436.788, y: 109.484}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &163305555
@@ -742,7 +742,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 825, y: 611.7}
+  m_AnchoredPosition: {x: 883, y: 468}
   m_SizeDelta: {x: 436.788, y: 109.484}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &653818729
@@ -1230,9 +1230,146 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c5e00303423314ba88f0be8d259dfe62, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Niantic.Lightship.SharedAR::Niantic.Lightship.SharedAR.Colocalization.SharedSpaceManager
-  _colocalizationType: 0
+  _colocalizationType: 1
   _sharedArRootPrefab: {fileID: 4781414300907772666, guid: addffc4d55be14f14b776b2b504b86d6, type: 3}
   _arLocationManager: {fileID: 0}
+--- !u!1 &911345132
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 911345133}
+  - component: {fileID: 911345135}
+  - component: {fileID: 911345134}
+  m_Layer: 5
+  m_Name: Text (TMP) (3)
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!224 &911345133
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 911345132}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1876170418}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0.5, y: 0.5}
+  m_AnchorMax: {x: 0.5, y: 0.5}
+  m_AnchoredPosition: {x: 777, y: -324}
+  m_SizeDelta: {x: 760.101, y: 418.71}
+  m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &911345134
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 911345132}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f4688fdb7df04437aeb418b961361dc5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.TextMeshPro::TMPro.TextMeshProUGUI
+  m_Material: {fileID: 0}
+  m_Color: {r: 1, g: 1, b: 1, a: 1}
+  m_RaycastTarget: 1
+  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
+  m_Maskable: 1
+  m_OnCullStateChanged:
+    m_PersistentCalls:
+      m_Calls: []
+  m_text: New Text
+  m_isRightToLeft: 0
+  m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
+  m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
+  m_fontSharedMaterials: []
+  m_fontMaterial: {fileID: 0}
+  m_fontMaterials: []
+  m_fontColor32:
+    serializedVersion: 2
+    rgba: 4294967295
+  m_fontColor: {r: 1, g: 1, b: 1, a: 1}
+  m_enableVertexGradient: 0
+  m_colorMode: 3
+  m_fontColorGradient:
+    topLeft: {r: 1, g: 1, b: 1, a: 1}
+    topRight: {r: 1, g: 1, b: 1, a: 1}
+    bottomLeft: {r: 1, g: 1, b: 1, a: 1}
+    bottomRight: {r: 1, g: 1, b: 1, a: 1}
+  m_fontColorGradientPreset: {fileID: 0}
+  m_spriteAsset: {fileID: 0}
+  m_tintAllSprites: 0
+  m_StyleSheet: {fileID: 0}
+  m_TextStyleHashCode: -1183493901
+  m_overrideHtmlColors: 0
+  m_faceColor:
+    serializedVersion: 2
+    rgba: 4294967295
+  m_fontSize: 72
+  m_fontSizeBase: 36
+  m_fontWeight: 400
+  m_enableAutoSizing: 1
+  m_fontSizeMin: 18
+  m_fontSizeMax: 72
+  m_fontStyle: 0
+  m_HorizontalAlignment: 1
+  m_VerticalAlignment: 256
+  m_textAlignment: 65535
+  m_characterSpacing: 0
+  m_characterHorizontalScale: 1
+  m_wordSpacing: 0
+  m_lineSpacing: 0
+  m_lineSpacingMax: 0
+  m_paragraphSpacing: 0
+  m_charWidthMaxAdj: 0
+  m_TextWrappingMode: 1
+  m_wordWrappingRatios: 0.4
+  m_overflowMode: 0
+  m_linkedTextComponent: {fileID: 0}
+  parentLinkedComponent: {fileID: 0}
+  m_enableKerning: 0
+  m_ActiveFontFeatures: 6e72656b
+  m_enableExtraPadding: 0
+  checkPaddingRequired: 0
+  m_isRichText: 1
+  m_EmojiFallbackSupport: 1
+  m_parseCtrlCharacters: 1
+  m_isOrthographic: 1
+  m_isCullingEnabled: 0
+  m_horizontalMapping: 0
+  m_verticalMapping: 0
+  m_uvLineOffset: 0
+  m_geometrySortingOrder: 0
+  m_IsTextObjectScaleStatic: 0
+  m_VertexBufferAutoSizeReduction: 0
+  m_useMaxVisibleDescender: 1
+  m_pageToDisplay: 1
+  m_margin: {x: 0, y: 0, z: 0, w: 0}
+  m_isUsingLegacyAnimationComponent: 0
+  m_isVolumetricText: 0
+  m_hasFontAssetChanged: 0
+  m_baseMaterial: {fileID: 0}
+  m_maskOffset: {x: 0, y: 0, z: 0, w: 0}
+--- !u!222 &911345135
+CanvasRenderer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 911345132}
+  m_CullTransparentMesh: 1
 --- !u!1 &989603797
 GameObject:
   m_ObjectHideFlags: 0
@@ -1246,6 +1383,7 @@ GameObject:
   - component: {fileID: 989603800}
   - component: {fileID: 989603799}
   - component: {fileID: 989603802}
+  - component: {fileID: 989603803}
   m_Layer: 0
   m_Name: Network_Manager
   m_TagString: Untagged
@@ -1280,12 +1418,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f94b269f6046ce74ebcd6072161cbb96, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::NetworkColocalizationManager
-  targetImage: {fileID: 2800000, guid: 281e99beef7fdab4fbb1bb39242cc993, type: 3}
+  targetTexture: {fileID: 2800000, guid: dacfd162a8085b141aeed28ce132b28e, type: 3}
   targetWidthPhysicalSize: 0.15
   connectionUI: {fileID: 784334360}
   pinInputField: {fileID: 1299152552}
   pinText: {fileID: 1655850842}
   mainCardScanner: {fileID: 1387253626}
+  trackedImageManager: {fileID: 1387253627}
 --- !u!114 &989603800
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1354,27 +1493,22 @@ MonoBehaviour:
   m_GameObject: {fileID: 989603797}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 6960e84d07fb87f47956e7a81d71c4e6, type: 3}
+  m_Script: {fileID: 11500000, guid: 39a7c1e438dc4e689f75a8ff942540a8, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.Transports.UTP.UnityTransport
-  m_ProtocolType: 0
-  m_UseWebSockets: 0
-  m_UseEncryption: 0
-  m_MaxPacketQueueSize: 128
-  m_MaxPayloadSize: 6144
-  m_HeartbeatTimeoutMS: 500
-  m_ConnectTimeoutMS: 1000
-  m_MaxConnectAttempts: 60
-  m_DisconnectTimeoutMS: 30000
-  ConnectionData:
-    Address: 127.0.0.1
-    Port: 7777
-    ServerListenAddress: 127.0.0.1
-    ClientBindPort: 0
-  DebugSimulator:
-    PacketDelayMS: 0
-    PacketJitterMS: 0
-    PacketDropRate: 0
+  m_EditorClassIdentifier: Niantic.Lightship.SharedAR::Niantic.Lightship.SharedAR.Netcode.LightshipNetcodeTransport
+--- !u!114 &989603803
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 989603797}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f016f315122807243b9d4aa7b75d7961, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::VisualLogger
+  logDisplay: {fileID: 911345134}
 --- !u!1 &1023282227
 GameObject:
   m_ObjectHideFlags: 0
@@ -1458,8 +1592,8 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 0}
-        m_TargetAssemblyTypeName: ImageTrackingColocalizationManager, Assembly-CSharp
+      - m_Target: {fileID: 989603799}
+        m_TargetAssemblyTypeName: NetworkColocalizationManager, Assembly-CSharp
         m_MethodName: StartNetworkAsHostOrClient
         m_Mode: 6
         m_Arguments:
@@ -1542,7 +1676,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: -835.644, y: 332.91}
+  m_AnchoredPosition: {x: -783, y: -324}
   m_SizeDelta: {x: 760.101, y: 418.71}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1069021670
@@ -2787,7 +2921,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls: []
   m_SerializedLibrary: {fileID: 11400000, guid: 99eee0cccbc79e34ba32a03055203516, type: 2}
-  m_MaxNumberOfMovingImages: 10
+  m_MaxNumberOfMovingImages: 11
   m_TrackedImagePrefab: {fileID: 0}
 --- !u!114 &1387253628
 MonoBehaviour:
@@ -3391,8 +3525,8 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 0}
-        m_TargetAssemblyTypeName: ImageTrackingColocalizationManager, Assembly-CSharp
+      - m_Target: {fileID: 989603799}
+        m_TargetAssemblyTypeName: NetworkColocalizationManager, Assembly-CSharp
         m_MethodName: StartNetworkAsHostOrClient
         m_Mode: 6
         m_Arguments:
@@ -3532,7 +3666,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 60, y: -60}
+  m_AnchoredPosition: {x: 60, y: -220}
   m_SizeDelta: {x: 400, y: 50}
   m_Pivot: {x: 0, y: 1}
 --- !u!114 &1655850842
@@ -3883,7 +4017,19 @@ MonoBehaviour:
   m_TargetGraphic: {fileID: 1875185884}
   m_OnClick:
     m_PersistentCalls:
-      m_Calls: []
+      m_Calls:
+      - m_Target: {fileID: 1611536389}
+        m_TargetAssemblyTypeName: ARDeployFlow, Assembly-CSharp
+        m_MethodName: OnReadyClicked
+        m_Mode: 1
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
 --- !u!114 &1875185884
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -4025,6 +4171,7 @@ RectTransform:
   - {fileID: 163305554}
   - {fileID: 653818728}
   - {fileID: 1069021669}
+  - {fileID: 911345133}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
@@ -4074,6 +4221,7 @@ GameObject:
   m_Component:
   - component: {fileID: 2002525154}
   - component: {fileID: 2002525155}
+  - component: {fileID: 2002525156}
   m_Layer: 0
   m_Name: NetworkObject
   m_TagString: Untagged
@@ -4115,12 +4263,26 @@ MonoBehaviour:
   AlwaysReplicateAsRoot: 0
   SynchronizeTransform: 1
   ActiveSceneSynchronization: 0
-  SceneMigrationSynchronization: 1
+  SceneMigrationSynchronization: 0
   SpawnWithObservers: 1
   DontDestroyWithOwner: 0
   AutoObjectParentSync: 1
   SyncOwnerTransformWhenParented: 1
   AllowOwnerToParent: 0
+--- !u!114 &2002525156
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2002525153}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 57c28ed28c284b8bbb08e7d5bded1bd9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Niantic.Lightship.SharedAR::Niantic.Lightship.SharedAR.Netcode.LightshipNetworkObject
+  ShowTopMostFoldoutHeaderGroup: 1
+  _putInSharedOrigin: 1
 --- !u!1 &2110767099
 GameObject:
   m_ObjectHideFlags: 0
