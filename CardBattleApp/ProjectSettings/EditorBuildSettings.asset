@@ -5,13 +5,13 @@ EditorBuildSettings:
   m_ObjectHideFlags: 0
   serializedVersion: 2
   m_Scenes:
-  - enabled: 1
+  - enabled: 0
     path: Assets/Scenes/00_Splash.unity
     guid: 22966e1d4c56a70469b02f4d50605f25
-  - enabled: 1
+  - enabled: 0
     path: Assets/Scenes/01_MainMenu.unity
     guid: c325e64f929994346b099d0c86c6e952
-  - enabled: 1
+  - enabled: 0
     path: Assets/Scenes/01_02_Tutorial.unity
     guid: 17c4c32fa003c8342bf27b341ad2f22c
   - enabled: 0
@@ -23,6 +23,9 @@ EditorBuildSettings:
   - enabled: 0
     path: Assets/Scenes/01_02_Tutorial.unity
     guid: 17c4c32fa003c8342bf27b341ad2f22c
+  - enabled: 1
+    path: Assets/Scenes/prueba_multijugador_by_smol.unity
+    guid: f4f4f55115302c74e8fac50717148756
   m_configObjects:
     Niantic.Lightship.AR.AuthBuildSettings: {fileID: 11400000, guid: 4393672ba1da1d341bc37120ff243db0, type: 2}
     Niantic.Lightship.AR.LightshipSettings: {fileID: 11400000, guid: b9161e0eafd6383499ac83635cdf8d7c, type: 2}
