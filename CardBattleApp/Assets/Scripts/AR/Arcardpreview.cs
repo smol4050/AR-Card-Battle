@@ -194,7 +194,7 @@ public class ARCardPreview : MonoBehaviour
     // ─── UPDATE — animaciones y auto-rotate ───────────────────────────────────
     private void Update()
     {
-        List<PreviewInstance> toRemove = null;
+        //List<PreviewInstance> toRemove = null;
 
         foreach (var kv in _activeInstances)
         {

@@ -7,7 +7,7 @@ using UnityEngine.XR.ARFoundation;
 [RequireComponent(typeof(SharedSpaceFactory))]
 public class NetworkColocalizationManager : MonoBehaviour, IColocalizationRoom
 {
-    [Header("Lightship Target (QR o Imagen Ancla)")]
+    [Header("Lightship — Imagen Ancla")]
     [SerializeField] private Texture2D targetTexture;
     [SerializeField] private float targetWidthPhysicalSize = 0.15f;
 
@@ -16,9 +16,8 @@ public class NetworkColocalizationManager : MonoBehaviour, IColocalizationRoom
     [SerializeField] private TMP_InputField pinInputField;
     [SerializeField] private TextMeshProUGUI pinText;
 
-    [Header("Nuestros Sistemas")]
-    [SerializeField] private ARCardScanner mainCardScanner;
-    [SerializeField] private ARTrackedImageManager trackedImageManager;
+    [Header("Referencia al Scanner")]
+    [SerializeField] private ARCardScanner1 mainCardScanner;
 
     private SharedSpaceFactory _sharedSpaceFactory;
     private SharedSpaceManager _sharedSpaceManager;
@@ -28,7 +27,6 @@ public class NetworkColocalizationManager : MonoBehaviour, IColocalizationRoom
     {
         _sharedSpaceFactory = GetComponent<SharedSpaceFactory>();
         _sharedSpaceFactory.OnSharedSpaceTracking += SharedSpaceStartTracking;
-        if (mainCardScanner != null) mainCardScanner.enabled = false;
     }
 
     private void OnDisable()
@@ -49,17 +47,15 @@ public class NetworkColocalizationManager : MonoBehaviour, IColocalizationRoom
             _sharedSpaceManager.sharedSpaceManagerStateChanged += OnManagerStateChanged;
     }
 
-    // ─── FIX: Eliminada la propiedad .Connected que no existe en ARDK 3.x ───
     private void OnManagerStateChanged(SharedSpaceManager.SharedSpaceManagerStateChangeEventArgs args)
     {
-        // En ARDK 3.x, 'Tracking' es el indicador de que la colocalización funcionó
-        string trackingStatus = args.Tracking ? "Alineado" : "Buscando QR...";
-
-        Debug.Log($"[LIGHTSHIP] Estado de Tracking: {trackingStatus}");
+        string status = args.Tracking ? "Alineado ✓" : "Buscando imagen ancla...";
+        Debug.Log($"[LIGHTSHIP] Estado: {status}");
 
         if (pinText != null && pinText.gameObject.activeSelf)
         {
-            pinText.text = $"SALA: {pinInputField.text}\nEstado: {trackingStatus}";
+            string roomName = (pinInputField != null && !string.IsNullOrEmpty(pinInputField.text)) ? pinInputField.text : "0000";
+            pinText.text = $"SALA: {roomName}\nEstado: {status}";
         }
     }
 
@@ -75,7 +71,11 @@ public class NetworkColocalizationManager : MonoBehaviour, IColocalizationRoom
         string roomName = (pinInputField != null && !string.IsNullOrEmpty(pinInputField.text))
             ? pinInputField.text : "0000";
 
-        if (targetTexture == null) return;
+        if (targetTexture == null)
+        {
+            Debug.LogError("[NetworkColocalizationManager] No se asignó targetTexture.");
+            return;
+        }
 
         var imageTrackingOptions = ISharedSpaceTrackingOptions.CreateImageTrackingOptions(
             targetTexture, targetWidthPhysicalSize);
@@ -90,17 +90,25 @@ public class NetworkColocalizationManager : MonoBehaviour, IColocalizationRoom
     {
         if (pinText != null) pinText.text = "¡Mundo Sincronizado!";
 
-        if (_startAsHost) StartHost();
-        else StartClient();
+        // Iniciamos Netcode
+        if (_startAsHost) NetworkManager.Singleton.StartHost();
+        else NetworkManager.Singleton.StartClient();
 
+        // Activamos el scanner de cartas solo cuando la red está lista
         if (mainCardScanner != null)
         {
-            mainCardScanner.enabled = true;
-            Invoke(nameof(HideStatusText), 2f);
+            mainCardScanner.SetNetworkReady();
+            Debug.Log("<color=green>[Network] Colocalización exitosa. Scanner habilitado.</color>");
         }
+
+        Invoke(nameof(HideStatusText), 2f);
     }
 
-    private void HideStatusText() => pinText.gameObject.SetActive(false);
+    private void HideStatusText()
+    {
+        if (pinText != null) pinText.gameObject.SetActive(false);
+    }
+
     public void StartHost() => NetworkManager.Singleton?.StartHost();
     public void StartClient() => NetworkManager.Singleton?.StartClient();
 }

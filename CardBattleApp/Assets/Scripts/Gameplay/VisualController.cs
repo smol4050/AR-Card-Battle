@@ -642,4 +642,9 @@ public class VisualController : MonoBehaviour
         }
         if (t != null) t.position = orig;
     }
+
+    public BattlefieldReferences GetBoardRefs()
+    {
+        return _board;
+    }
 }

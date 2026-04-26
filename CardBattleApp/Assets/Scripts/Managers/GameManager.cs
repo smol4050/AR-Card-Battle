@@ -13,6 +13,8 @@ public class GameManager : MonoBehaviour
     public bool isSuddenDeathActive { get; private set; }
     public float suddenDeathMultiplier = 1f;
 
+    [SerializeField] private VisualController _visualController;
+
     // Naves activas (máximo 1 por bando por ronda)
     private ShipInstance[] _activeShips = new ShipInstance[2];
     private bool[] _shipUsedThisRound = new bool[2];
@@ -152,6 +154,19 @@ public class GameManager : MonoBehaviour
         activeUnits[playerId].Add(newUnit);
         OnUnitSpawned?.Invoke(playerId, newUnit);
         return true;
+    }
+
+    private void SpawnUnitInternal(int playerId, CardID cardId, Vector2 logicalPos, int row, int slotIndex)
+    {
+        // Esta es la lógica que ya tenías en CreateUnit, pero encapsulada para la red
+        Unit newUnit = CreateUnit(playerId, cardId, row, slotIndex);
+        if (newUnit == null) return;
+
+        newUnit.logicalPosition = logicalPos;
+        activeUnits[playerId].Add(newUnit);
+
+        // Disparar el evento para que VisualController instancie el modelo 3D
+        OnUnitSpawned?.Invoke(playerId, newUnit);
     }
 
     // ─── FACTORY DE UNIDADES ──────────────────────────────────────────────────
@@ -644,5 +659,25 @@ public class GameManager : MonoBehaviour
     {
         OnUnitDied?.Invoke(playerId, unit);
     }
+    // Añadir a GameManager.cs
+    public void ExecuteRemotePlay(int playerId, CardID cardId, int slotIndex)
+    {
+        int row = (slotIndex < 3) ? 0 : 1;
+        // Buscamos la posición visual en el tablero LOCAL de este jugador
+        // usando las referencias de BattlefieldReferences que ya tienes.
+        Transform slotTransform = _visualController.GetBoardRefs().GetSlot(playerId, row, slotIndex);
+
+        Vector2 logicalPos = new Vector2(slotTransform.localPosition.x, slotTransform.localPosition.z);
+
+        // Llamamos a la creación de unidad interna bypassando el costo de energía
+        SpawnUnitInternal(playerId, cardId, logicalPos, row, slotIndex);
+    }
+
+    public BattlefieldReferences GetBoardRefs()
+    {
+        if (_visualController != null) return _visualController.GetBoardRefs();
+        return null;
+    }
+
     public void LogMessage(int playerId, string msg) => OnLogMessage?.Invoke(playerId, msg);
 }
