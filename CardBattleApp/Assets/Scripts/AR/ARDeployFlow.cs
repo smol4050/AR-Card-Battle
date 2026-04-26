@@ -1,48 +1,42 @@
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
+using System;
+using System.Collections.Generic;
 
 /// <summary>
-/// Gestiona el flujo de despliegue del jugador 0 (Sollar) en AR.
-///
-/// FLUJO:
-///  1. Jugador escanea una carta  → aparece panel de confirmación.
-///  2. Jugador pulsa Confirmar    → entra en modo "esperando slot".
-///  3. Jugador toca un SlotCollider aliado → la unidad se instancia allí.
-///     Si ya había una unidad previa de esa carta (pendiente de recolocar),
-///     se elimina del slot anterior y se mueve al nuevo.
-///     El jugador puede seguir tocando otros slots para cambiarla de lugar.
-///  4. Para fijar la unidad y pasar a la siguiente, el jugador escanea
-///     otra carta (o pulsa "Listo" para terminar).
-///  5. Al pulsar "Listo": la IA despliega y comienza la batalla.
+/// Gestiona el despliegue del jugador 0 (Sollar) en AR.
 /// </summary>
 public class ARDeployFlow : MonoBehaviour
 {
-    // ─── Referencias de sistema ───────────────────────────────────────────────
     [Header("Referencias de sistema")]
     public GameManager gameManager;
     public ARCardScanner scanner;
     public TutorialAIController aiController;
 
-    // ─── UI — Confirmación de carta ───────────────────────────────────────────
     [Header("UI — Confirmación de carta")]
     public GameObject confirmPanel;
     public TextMeshProUGUI cardNameText;
 
-    // ─── UI — Estado general ──────────────────────────────────────────────────
     [Header("UI — Estado")]
     public TextMeshProUGUI statusText;
     public TextMeshProUGUI logText;
     public Button readyButton;
 
-    // ─── UI — Energía ─────────────────────────────────────────────────────────
     [Header("UI — Energía del jugador")]
     public TextMeshProUGUI playerEnergyText;
 
-    // ─── Capas de raycast ─────────────────────────────────────────────────────
     [Header("Raycast")]
-    [Tooltip("LayerMask que incluya la capa donde están los SlotColliders.")]
-    public LayerMask slotLayerMask = ~0;   // por defecto, todo; ajusta en Inspector
+    public LayerMask slotLayerMask = ~0;
+
+    [Header("Cooldown de escaneo (segundos)")]
+    public float scanCooldown = 2f;
+
+    // ─── EVENTOS PÚBLICOS PARA TutorialFlowController ─────────────────────────
+    public event Action OnBoardReady;      // paso 1: tablero detectado
+    public event Action OnCardConfirmed;   // paso 2: carta escaneada y confirmada
+    public event Action OnUnitPlaced;      // paso 3: unidad colocada en slot
+    public event Action OnPlayerReady;     // ready pulsado → batalla
 
     // ─── Estado interno ───────────────────────────────────────────────────────
     private CardID _pendingCard = CardID.None;
@@ -50,26 +44,23 @@ public class ARDeployFlow : MonoBehaviour
     private bool _battlefieldReady = false;
     private bool _playerDeclaredReady = false;
 
-    // Última unidad colocada que aún puede recolocarse (antes de escanear otra carta)
     private int _lastPlacedSlot = -1;
     private CardID _lastPlacedCardId = CardID.None;
 
-    // Cartas permitidas para el jugador 0 (Sollar)
+    private Dictionary<CardID, float> _lastScanTime = new Dictionary<CardID, float>();
+
     private static readonly CardID[] _allowedSollarCards =
     {
-        CardID.SollarDuelist,
-        CardID.SollarForce,
-        CardID.SollarCommander,
-        CardID.SolarVanguard,
+        CardID.SollarDuelist, CardID.SollarForce,
+        CardID.SollarCommander, CardID.SolarVanguard,
     };
 
-    // ─── INICIALIZACIÓN ───────────────────────────────────────────────────────
+    // ─── CICLO DE VIDA ────────────────────────────────────────────────────────
     private void Awake()
     {
         if (gameManager == null) Debug.LogError("[ARDeployFlow] GameManager no asignado.");
         if (scanner == null) Debug.LogError("[ARDeployFlow] ARCardScanner no asignado.");
         if (aiController == null) Debug.LogError("[ARDeployFlow] TutorialAIController no asignado.");
-        if (readyButton == null) Debug.LogWarning("[ARDeployFlow] ReadyButton no asignado.");
 
         if (confirmPanel != null) confirmPanel.SetActive(false);
         if (readyButton != null) readyButton.interactable = false;
@@ -79,69 +70,80 @@ public class ARDeployFlow : MonoBehaviour
 
     private void OnEnable()
     {
-        scanner.OnCardScanned += HandleCardScanned;
-        scanner.OnBattlefieldSpawned += HandleBattlefieldSpawned;
+        if (scanner != null)
+        {
+            scanner.OnBattlefieldSpawned += HandleBattlefieldSpawned;
+            scanner.OnCardScanned += HandleCardScanned;
+        }
         if (gameManager != null) gameManager.OnLogMessage += AppendLog;
     }
 
     private void OnDisable()
     {
-        scanner.OnCardScanned -= HandleCardScanned;
-        scanner.OnBattlefieldSpawned -= HandleBattlefieldSpawned;
+        if (scanner != null)
+        {
+            scanner.OnBattlefieldSpawned -= HandleBattlefieldSpawned;
+            scanner.OnCardScanned -= HandleCardScanned;
+        }
         if (gameManager != null) gameManager.OnLogMessage -= AppendLog;
+    }
+
+    // ─── GESTIÓN VISUAL DE UI ─────────────────────────────────────────────────
+    private void ToggleMainUI(bool isVisible)
+    {
+        if (statusText != null) statusText.gameObject.SetActive(isVisible);
+        if (logText != null) logText.gameObject.SetActive(isVisible);
+        if (playerEnergyText != null) playerEnergyText.gameObject.SetActive(isVisible);
+        if (readyButton != null) readyButton.gameObject.SetActive(isVisible);
     }
 
     // ─── TABLERO LISTO ────────────────────────────────────────────────────────
     private void HandleBattlefieldSpawned(BattlefieldReferences board)
     {
+        if (_battlefieldReady) return;
+
         _battlefieldReady = true;
         gameManager.InitializeGame();
         gameManager.players[0].energy = 10;
 
         if (readyButton != null) readyButton.interactable = true;
-
-        SetStatus("Tablero listo. Escanea tus cartas Sollar y colócalas en el tablero.");
+        SetStatus("Tablero listo. Escanea tus cartas Sollar.");
         RefreshEnergyUI();
-        Debug.Log("[ARDeployFlow] Tablero registrado. Fase de despliegue activa.");
+
+        OnBoardReady?.Invoke();
     }
 
     // ─── ESCANEO DE CARTA ─────────────────────────────────────────────────────
     private void HandleCardScanned(CardID cardId)
     {
-        if (!_battlefieldReady)
-        {
-            SetStatus("Primero escanea el tablero.");
-            return;
-        }
+        if (!_battlefieldReady) { SetStatus("Primero escanea el tablero."); return; }
         if (_playerDeclaredReady) return;
-
-        // Carta del bando incorrecto
         if (!IsSollarCard(cardId))
         {
-            SetStatus($"<color=red>{cardId} es del Vacío. Solo puedes usar cartas Sollar.</color>");
+            SetStatus($"<color=red>{cardId} es del Vacío. Solo cartas Sollar.</color>");
             return;
         }
 
-        // Si hay una carta esperando slot, ignoramos el re-escaneo
-        // (el jugador debe tocar un slot primero o cancelar)
+        float now = Time.time;
+        if (_lastScanTime.TryGetValue(cardId, out float last) && now - last < scanCooldown) return;
+        _lastScanTime[cardId] = now;
+
         if (_isWaitingForSlot)
         {
-            SetStatus("Toca un slot del tablero para colocar la unidad pendiente, o cancela primero.");
+            SetStatus("Toca un slot primero, o cancela la carta actual.");
             return;
         }
 
-        // Al escanear una carta nueva, la unidad anterior queda fijada en su slot
         _lastPlacedSlot = -1;
         _lastPlacedCardId = CardID.None;
-
         _pendingCard = cardId;
         int cost = GetCardCost(cardId);
 
-        if (cardNameText != null)
-            cardNameText.text = $"¿Desplegar {cardId}?\nCosto: {cost} Energía";
+        if (cardNameText != null) cardNameText.text = $"¿Desplegar {cardId}?\nCosto: {cost} Energía";
 
+        // Mostrar panel de confirmación y ocultar la UI principal
         if (confirmPanel != null) confirmPanel.SetActive(true);
-        SetStatus($"Confirma el despliegue de {cardId} (costo: {cost}).");
+        ToggleMainUI(false);
     }
 
     private bool IsSollarCard(CardID id)
@@ -157,12 +159,18 @@ public class ARDeployFlow : MonoBehaviour
         return 1;
     }
 
-    // ─── CONFIRMACIÓN ────────────────────────────────────────────────────────
+    // ─── CONFIRMACIÓN Y CANCELACIÓN ───────────────────────────────────────────
     public void OnConfirmDeploy()
     {
         if (confirmPanel != null) confirmPanel.SetActive(false);
         _isWaitingForSlot = true;
-        SetStatus("Toca una casilla aliada en el tablero para colocar la unidad.");
+
+        // Recuperar la UI principal
+        ToggleMainUI(true);
+        ToggleSlotHighlights(true);
+
+        SetStatus("Toca una casilla aliada.");
+        OnCardConfirmed?.Invoke();
     }
 
     public void OnCancelDeploy()
@@ -171,240 +179,181 @@ public class ARDeployFlow : MonoBehaviour
         _isWaitingForSlot = false;
         _lastPlacedSlot = -1;
         _lastPlacedCardId = CardID.None;
+
         if (confirmPanel != null) confirmPanel.SetActive(false);
+
+        // Recuperar la UI principal
+        ToggleMainUI(true);
         SetStatus("Escanea una carta para desplegarla.");
     }
 
-    // ─── BOTÓN LISTO ─────────────────────────────────────────────────────────
+    // ─── BOTÓN LISTO ──────────────────────────────────────────────────────────
     public void OnReadyClicked()
     {
         if (_playerDeclaredReady) return;
-        if (!_battlefieldReady)
-        {
-            SetStatus("<color=red>Primero escanea el tablero.</color>");
-            return;
-        }
+        if (!_battlefieldReady) { SetStatus("<color=red>Primero escanea el tablero.</color>"); return; }
 
         _playerDeclaredReady = true;
         if (readyButton != null) readyButton.interactable = false;
-
-        // Cancelar flujo pendiente sin eliminar unidades ya colocadas
-        _pendingCard = CardID.None;
-        _isWaitingForSlot = false;
-        _lastPlacedSlot = -1;
-        _lastPlacedCardId = CardID.None;
         if (confirmPanel != null) confirmPanel.SetActive(false);
 
+        ToggleMainUI(true); // Asegurar que log y status estén visibles para la batalla
+
+        _pendingCard = CardID.None; _isWaitingForSlot = false;
+        _lastPlacedSlot = -1; _lastPlacedCardId = CardID.None;
+
         SetStatus("Esperando despliegue de la IA...");
-        AppendLog(-1, "<color=yellow>Jugador 0 listo. Analizando estrategia de Mahoraga...</color>");
+        AppendLog(-1, "<color=yellow>Jugador 0 listo. Mahoraga analiza...</color>");
 
         aiController.ExecuteDecisionLogic();
-
         gameManager.SetPlayerReady(0);
         gameManager.SetPlayerReady(1);
 
-        SetStatus("<color=red>¡GUERRA DECLARADA! El combate ha comenzado.</color>");
+        SetStatus("<color=red>¡GUERRA DECLARADA!</color>");
+        OnPlayerReady?.Invoke();
     }
 
-    // ─── DETECCIÓN DE TOQUE EN SLOT ───────────────────────────────────────────
+    // ─── RAYCAST ─────────────────────────────────────────────────────────────
     private void Update()
     {
         if (!_isWaitingForSlot || _pendingCard == CardID.None) return;
 
+        if (UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject(
+            Input.touchCount > 0 ? Input.GetTouch(0).fingerId : -1))
+        {
+            return;
+        }
+
 #if UNITY_EDITOR
-        // En el editor usamos el ratón para pruebas
-        if (Input.GetMouseButtonDown(0))
-            TryRaycast(Input.mousePosition);
+        if (Input.GetMouseButtonDown(0)) TryRaycast(Input.mousePosition);
 #else
-        if (Input.touchCount > 0 && Input.GetTouch(0).phase == TouchPhase.Began)
-            TryRaycast(Input.GetTouch(0).position);
+    if (Input.touchCount > 0 && Input.GetTouch(0).phase == TouchPhase.Began)
+        TryRaycast(Input.GetTouch(0).position);
 #endif
     }
 
     private void TryRaycast(Vector2 screenPos)
     {
         Ray ray = Camera.main.ScreenPointToRay(screenPos);
+        bool hit = Physics.Raycast(ray, out RaycastHit info, 100f, slotLayerMask);
+        if (!hit) hit = Physics.Raycast(ray, out info, 100f);
+        if (!hit) { Debug.Log("[ARDeployFlow] Raycast sin impacto."); return; }
 
-        // Intentamos primero con la layer mask específica
-        bool hit = Physics.Raycast(ray, out RaycastHit hitInfo, 100f, slotLayerMask);
-
-        // Fallback: raycast contra todo si no hay layer configurada
-        if (!hit) hit = Physics.Raycast(ray, out hitInfo, 100f);
-
-        if (!hit) return;
-
-        SlotCollider slot = hitInfo.collider.GetComponent<SlotCollider>();
-        if (slot == null)
-        {
-            // Buscar en el padre por si el collider está en un hijo
-            slot = hitInfo.collider.GetComponentInParent<SlotCollider>();
-        }
+        SlotCollider slot = info.collider.GetComponent<SlotCollider>()
+                         ?? info.collider.GetComponentInParent<SlotCollider>();
 
         if (slot != null) TryPlaceOnSlot(slot);
     }
 
-    // ─── COLOCAR / MOVER UNIDAD EN SLOT ──────────────────────────────────────
+    // ─── COLOCAR / MOVER ──────────────────────────────────────────────────────
     private void TryPlaceOnSlot(SlotCollider slot)
     {
-        // SolarVanguard solo en combate
         if (_pendingCard == CardID.SolarVanguard)
         {
-            SetStatus("<color=orange>Solar Vanguard se invoca durante el combate, no en preparación.</color>");
-            OnCancelDeploy();
-            return;
+            SetStatus("<color=orange>Solar Vanguard solo en combate.</color>");
+            OnCancelDeploy(); return;
         }
 
         int cost = GetCardCost(_pendingCard);
+        bool wasPlaced = _lastPlacedSlot != -1 && _lastPlacedCardId == _pendingCard;
 
-        // Si el jugador ya colocó esta unidad antes (mismo escaneo) en otro slot,
-        // la quitamos del slot anterior antes de intentar ponerla en el nuevo.
-        bool wasPlacedBefore = _lastPlacedSlot != -1 && _lastPlacedCardId == _pendingCard;
-
-        if (wasPlacedBefore && _lastPlacedSlot == slot.slotIndex)
+        if (wasPlaced && _lastPlacedSlot == slot.slotIndex)
         {
-            // Tocó el mismo slot donde ya está → confirmar posición (sin hacer nada)
-            SetStatus($"<color=lime>{_pendingCard} ya está en este slot. Escanea otra carta o pulsa Listo.</color>");
+            SetStatus($"<color=lime>{_pendingCard} ya está aquí. Escanea otra o pulsa Listo.</color>");
             return;
         }
 
-        if (wasPlacedBefore)
+        if (wasPlaced)
         {
-            // Eliminar del slot anterior para "moverla"
             RemoveUnitFromSlot(0, _lastPlacedSlot);
-            // Devolvemos la energía ya que se va a recolocar
             gameManager.players[0].energy += cost;
         }
 
-        // Verificar que el slot destino esté libre
-        bool slotOccupied = gameManager.activeUnits[0] != null &&
-                            gameManager.activeUnits[0].Exists(u => u.slotIndex == slot.slotIndex && !u.IsDead);
+        bool occupied = gameManager.activeUnits[0] != null &&
+                        gameManager.activeUnits[0].Exists(u => u.slotIndex == slot.slotIndex && !u.IsDead);
 
-        if (slotOccupied)
+        if (occupied)
         {
-            // Si el slot está ocupado por OTRA unidad diferente, no podemos mover aquí
-            SetStatus("<color=red>Ese slot ya está ocupado por otra unidad.</color>");
-
-            // Revertir: volver a colocar en el slot anterior si existía
-            if (wasPlacedBefore)
-            {
-                gameManager.players[0].energy -= cost; // quitamos la energía que devolvimos
-                // Intentar recolocar en slot anterior
-                TrySpawnAtSlot(_pendingCard, _lastPlacedSlot, cost);
-            }
+            SetStatus("<color=red>Slot ocupado por otra unidad.</color>");
+            if (wasPlaced) { gameManager.players[0].energy -= cost; TrySpawnAtSlot(_pendingCard, _lastPlacedSlot, cost); }
             return;
         }
 
-        // Intentar colocar en el nuevo slot
-        bool success = TrySpawnAtSlot(_pendingCard, slot.slotIndex, cost);
-
-        if (success)
+        if (TrySpawnAtSlot(_pendingCard, slot.slotIndex, cost))
         {
             _lastPlacedSlot = slot.slotIndex;
             _lastPlacedCardId = _pendingCard;
             RefreshEnergyUI();
-            SetStatus($"<color=lime>{_pendingCard} en slot {slot.slotIndex}. " +
-                      $"Toca otro slot para moverla, escanea otra carta, o pulsa Listo.</color>");
+            SetStatus($"<color=lime>{_pendingCard} en slot {slot.slotIndex}. Toca otro para mover o pulsa Listo.</color>");
+
+            ToggleSlotHighlights(false);
+            OnUnitPlaced?.Invoke();
         }
         else
         {
-            int energy = gameManager.players[0].energy;
-            if (energy < cost)
-                SetStatus($"<color=red>Energía insuficiente ({energy}/{cost}). Pulsa Listo para comenzar.</color>");
-            else
-                SetStatus("<color=red>No se pudo colocar la unidad. Intenta otro slot.</color>");
+            int e = gameManager.players[0].energy;
+            SetStatus(e < cost
+                ? $"<color=red>Energía insuficiente ({e}/{cost}).</color>"
+                : "<color=red>No se pudo colocar. Intenta otro slot.</color>");
         }
     }
 
-    /// <summary>
-    /// Intenta instanciar la carta en el slot dado usando el Transform del tablero AR.
-    /// Retorna true si GameManager.PlayCard tuvo éxito.
-    /// </summary>
+    private void ToggleSlotHighlights(bool active)
+    {
+        if (scanner == null || scanner.BoardRefs == null) return;
+        foreach (var slot in scanner.BoardRefs.p0FrontSlots)
+            slot.GetComponent<SlotHighlighter>()?.SetHighlight(active);
+        foreach (var slot in scanner.BoardRefs.p0BackSlots)
+            slot.GetComponent<SlotHighlighter>()?.SetHighlight(active);
+    }
+
     private bool TrySpawnAtSlot(CardID cardId, int slotIndex, int cost)
     {
-        if (scanner.BoardRefs == null)
-        {
-            Debug.LogError("[ARDeployFlow] BoardRefs es null. El tablero no está registrado.");
-            return false;
-        }
+        if (scanner.BoardRefs == null) return false;
 
         int row = slotIndex < 3 ? 0 : 1;
-        Transform slotTransform = scanner.BoardRefs.GetSlot(0, row, slotIndex);
+        Transform t = scanner.BoardRefs.GetSlot(0, row, slotIndex);
+        if (t == null) return false;
 
-        if (slotTransform == null)
-        {
-            Debug.LogError($"[ARDeployFlow] Transform del slot {slotIndex} es null.");
-            return false;
-        }
+        BoxCollider col = t.GetComponent<BoxCollider>();
+        Vector2 pos = col != null
+            ? new Vector2(t.localPosition.x + col.center.x, t.localPosition.z + col.center.z)
+            : new Vector2(t.localPosition.x, t.localPosition.z);
 
-        // Posición lógica basada en el Transform del slot
-        BoxCollider col = slotTransform.GetComponent<BoxCollider>();
-        Vector2 logicalPos = col != null
-            ? new Vector2(slotTransform.localPosition.x + col.center.x,
-                          slotTransform.localPosition.z + col.center.z)
-            : new Vector2(slotTransform.localPosition.x, slotTransform.localPosition.z);
-
-        bool success = gameManager.PlayCard(0, cardId, logicalPos, row, slotIndex, cost);
-
-        if (success)
-            AppendLog(0, $"<color=lime>{cardId} colocada en slot {slotIndex} (row {row}).</color>");
-
-        return success;
+        bool ok = gameManager.PlayCard(0, cardId, pos, row, slotIndex, cost);
+        if (ok) AppendLog(0, $"<color=lime>{cardId} → slot {slotIndex} (row {row}).</color>");
+        return ok;
     }
 
-    /// <summary>
-    /// Elimina físicamente una unidad del equipo 0 en el slotIndex indicado
-    /// y dispara OnUnitDied para que VisualController destruya el GO.
-    /// </summary>
     private void RemoveUnitFromSlot(int playerId, int slotIndex)
     {
         if (gameManager.activeUnits[playerId] == null) return;
-
         for (int i = gameManager.activeUnits[playerId].Count - 1; i >= 0; i--)
         {
             Unit u = gameManager.activeUnits[playerId][i];
-            if (u.slotIndex == slotIndex && !u.IsDead)
-            {
-                // Marcamos como muerta para que VisualController la retire
-                u.currentHp = 0;
-                // Disparamos el evento de muerte visual
-                gameManager.OnUnitDied_Internal(playerId, u);
-                gameManager.activeUnits[playerId].RemoveAt(i);
-                AppendLog(playerId, $"<color=yellow>{u.cardId} retirada del slot {slotIndex} para recolocar.</color>");
-                break;
-            }
+            if (u.slotIndex != slotIndex || u.IsDead) continue;
+            u.currentHp = 0;
+            gameManager.OnUnitDied_Internal(playerId, u);
+            gameManager.activeUnits[playerId].RemoveAt(i);
+            break;
         }
     }
 
-    // ─── HELPERS DE UI ────────────────────────────────────────────────────────
-    private void SetStatus(string msg)
-    {
-        if (statusText != null) statusText.text = msg;
-    }
+    // ─── HELPERS UI ───────────────────────────────────────────────────────────
+    private void SetStatus(string msg) { if (statusText != null) statusText.text = msg; }
 
-    private void AppendLog(int playerId, string msg)
+    private void AppendLog(int pid, string msg)
     {
         if (logText == null) return;
-
-        string prefix = playerId switch
-        {
-            0 => "[Sollar] ",
-            1 => "[Vacío] ",
-            -1 => "[Sistema] ",
-            _ => ""
-        };
-
-        logText.text += $"\n{prefix}{msg}";
-
+        string pre = pid switch { 0 => "[Sollar] ", 1 => "[Vacío] ", -1 => "[Sistema] ", _ => "" };
+        logText.text += $"\n{pre}{msg}";
         string[] lines = logText.text.Split('\n');
-        if (lines.Length > 30)
-            logText.text = string.Join("\n", lines, lines.Length - 30, 30);
+        if (lines.Length > 30) logText.text = string.Join("\n", lines, lines.Length - 30, 30);
     }
 
     private void RefreshEnergyUI()
     {
-        if (playerEnergyText != null &&
-            gameManager?.players != null &&
-            gameManager.players[0] != null)
+        if (playerEnergyText != null && gameManager?.players?[0] != null)
             playerEnergyText.text = $"Energía: {gameManager.players[0].energy}";
     }
 }

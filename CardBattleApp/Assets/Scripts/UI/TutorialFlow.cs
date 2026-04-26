@@ -1,133 +1,118 @@
-using UnityEngine;
+﻿using UnityEngine;
 using System.Collections;
 
-public enum TutorialStep { ScanBoard, ScanCards, DeployUnit, FreePlay, ScanUnit }
+public enum TutorialStep { ScanBoard, ScanCards, DeployUnit, FreePlay }
 
+/// <summary>
+/// Controla los paneles del tutorial usando un sistema híbrido a prueba de fallos.
+/// </summary>
 public class TutorialFlowController : MonoBehaviour
 {
-    [Header("Referencias de Scripts")]
-    public ARCardScanner cardScanner;
-    public GameManager gameManager;
+    [Header("Referencia OBLIGATORIA")]
+    public ARDeployFlow deployFlow;
 
     [Header("Paneles de UI")]
-    public GameObject panelPaso1; // Escanear Tablero
-    public GameObject panelPaso2; // Escanear Cartas
-    public GameObject panelPaso3; // Posicionar Personaje
+    public GameObject panelPaso1;     // Escanea tablero
+    public GameObject panelPaso2;     // Escanea carta
+    public GameObject panelPaso3;     // Toca slot
+    public GameObject panelFreePlay;  // Pulsa Listo
+    public GameObject panelBattle;    // ¡Batalla!
 
-    private TutorialStep currentStep = TutorialStep.ScanBoard;
+    [Header("Duración panel batalla (segundos)")]
+    public float battlePanelDuration = 2.5f;
+
+    private TutorialStep _step = TutorialStep.ScanBoard;
 
     private void Start()
     {
-        ActualizarUI(TutorialStep.ScanBoard);
-
-        if (cardScanner != null)
+        if (deployFlow == null)
         {
-            cardScanner.OnBattlefieldSpawned += HandleBoardDetected;
-            cardScanner.OnCardScanned += HandleCardDetected;
-
-            if (cardScanner.IsBattlefieldReady)
-            {
-                HandleBoardDetected(cardScanner.BoardRefs);
-            }
+            Debug.LogError("[Tutorial] ARDeployFlow no asignado. El tutorial no funcionará.");
+            return;
         }
-
-        if (gameManager != null)
-        {
-            gameManager.OnUnitSpawned += HandleUnitDeployed;
-        }
+        RefreshPanels();
     }
 
+    // ─── EL PARCHE A PRUEBA DE FALLOS ─────────────────────────────────────────
+    // En lugar de depender de un evento frágil que puede perderse, el Update
+    // revisa activamente si el tablero ya existe físicamente.
     private void Update()
     {
-        // --- DETECCI�N DE TOQUE PARA AVANCE MANUAL ---
-        // Detecta toque en celular o click izquierdo en PC
-        if (Input.GetMouseButtonDown(0) || (Input.touchCount > 0 && Input.GetTouch(0).phase == TouchPhase.Began))
+        if (deployFlow == null || deployFlow.scanner == null) return;
+
+        // PASO 1 al PASO 2: ¿Apareció el tablero?
+        if (_step == TutorialStep.ScanBoard && deployFlow.scanner.IsBattlefieldReady)
         {
-            AvanceManualPorToque();
+            Debug.Log("<color=cyan>[Tutorial] Tablero detectado fìsicamente. Avanzando al Paso 2.</color>");
+            AdvanceTo(TutorialStep.ScanCards);
         }
     }
 
-    private void AvanceManualPorToque()
+    // ─── EVENTOS DE UI (Estos no fallan porque dependen de clics humanos) ─────
+    private void OnEnable()
     {
-        switch (currentStep)
+        if (deployFlow != null)
         {
-            case TutorialStep.ScanBoard:
-                Debug.Log("Tutorial: Avance manual al Paso 2 (Cartas)");
-                PasarAlSiguientePaso(TutorialStep.ScanCards);
-                break;
-            case TutorialStep.ScanCards:
-                Debug.Log("Tutorial: Avance manual al Paso 3 (Despliegue)");
-                PasarAlSiguientePaso(TutorialStep.DeployUnit);
-                break;
-            case TutorialStep.DeployUnit:
-                Debug.Log("Tutorial: Avance manual al Final (Modo Libre)");
-                PasarAlSiguientePaso(TutorialStep.FreePlay);
-                break;
-                // Si ya est� en FreePlay, no hacemos nada para no romper el juego
+            deployFlow.OnCardConfirmed += HandleCardConfirmed;
+            deployFlow.OnUnitPlaced += HandleUnitPlaced;
+            deployFlow.OnPlayerReady += HandlePlayerReady;
         }
     }
 
-    private void OnDestroy()
+    private void OnDisable()
     {
-        if (cardScanner != null)
+        if (deployFlow != null)
         {
-            cardScanner.OnBattlefieldSpawned -= HandleBoardDetected;
-            cardScanner.OnCardScanned -= HandleCardDetected;
-        }
-        if (gameManager != null)
-        {
-            gameManager.OnUnitSpawned -= HandleUnitDeployed;
+            deployFlow.OnCardConfirmed -= HandleCardConfirmed;
+            deployFlow.OnUnitPlaced -= HandleUnitPlaced;
+            deployFlow.OnPlayerReady -= HandlePlayerReady;
         }
     }
 
-    // --- MANEJO DE EVENTOS AUTOM�TICOS ---
-
-    private void HandleBoardDetected(BattlefieldReferences refs)
+    private void HandleCardConfirmed()
     {
-        if (currentStep == TutorialStep.ScanBoard)
-        {
-            PasarAlSiguientePaso(TutorialStep.ScanCards);
-        }
+        if (_step == TutorialStep.ScanCards) AdvanceTo(TutorialStep.DeployUnit);
     }
 
-    private void HandleCardDetected(CardID card)
+    private void HandleUnitPlaced()
     {
-        if (currentStep == TutorialStep.ScanCards)
-        {
-            PasarAlSiguientePaso(TutorialStep.DeployUnit);
-        }
+        if (_step == TutorialStep.DeployUnit) AdvanceTo(TutorialStep.FreePlay);
     }
 
-    private void HandleUnitDeployed(int playerId, Unit unit)
+    private void HandlePlayerReady()
     {
-        if (currentStep == TutorialStep.DeployUnit && playerId == 0)
-        {
-            PasarAlSiguientePaso(TutorialStep.FreePlay);
-        }
+        SetPanel(panelPaso1, false);
+        SetPanel(panelPaso2, false);
+        SetPanel(panelPaso3, false);
+        SetPanel(panelFreePlay, false);
+        if (panelBattle != null) StartCoroutine(ShowBattlePanel());
     }
 
-    private void PasarAlSiguientePaso(TutorialStep next)
+    // ─── GESTIÓN DE PANELES ───────────────────────────────────────────────────
+    private void AdvanceTo(TutorialStep next)
     {
-        currentStep = next;
-        ActualizarUI(currentStep);
+        _step = next;
+        RefreshPanels();
     }
 
-    private void ActualizarUI(TutorialStep step)
+    private void RefreshPanels()
     {
-        if (panelPaso1) panelPaso1.SetActive(step == TutorialStep.ScanBoard);
-        if (panelPaso2) panelPaso2.SetActive(step == TutorialStep.ScanCards);
-        if (panelPaso3) panelPaso3.SetActive(step == TutorialStep.ScanUnit || step == TutorialStep.DeployUnit);
-
-        if (step == TutorialStep.FreePlay)
-        {
-            StartCoroutine(FinalizarTutorial());
-        }
+        SetPanel(panelPaso1, _step == TutorialStep.ScanBoard);
+        SetPanel(panelPaso2, _step == TutorialStep.ScanCards);
+        SetPanel(panelPaso3, _step == TutorialStep.DeployUnit);
+        SetPanel(panelFreePlay, _step == TutorialStep.FreePlay);
+        SetPanel(panelBattle, false);
     }
 
-    private IEnumerator FinalizarTutorial()
+    private IEnumerator ShowBattlePanel()
     {
-        yield return new WaitForSeconds(2f);
-        if (panelPaso3) panelPaso3.SetActive(false);
-        Debug.Log("<color=yellow>Tutorial Finalizado - Control total al jugador</color>");
+        SetPanel(panelBattle, true);
+        yield return new WaitForSeconds(battlePanelDuration);
+        SetPanel(panelBattle, false);
+    }
+
+    private static void SetPanel(GameObject p, bool active)
+    {
+        if (p != null) p.SetActive(active);
     }
 }
