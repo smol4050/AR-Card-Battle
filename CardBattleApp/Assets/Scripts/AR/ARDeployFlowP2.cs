@@ -89,8 +89,17 @@ public class ARDeployFlowP2 : MonoBehaviour
     public void OnReady()
     {
         _playerDeclaredReady = true;
-        readyButton.interactable = false;
-        gameManager.SetPlayerReady(1);
+        if (readyButton != null) readyButton.interactable = false;
+
+        // EL CAMBIO CRÍTICO: Avisamos a la red usando el sistema de Photon
+        NetworkGameManager netManager = FindAnyObjectByType<NetworkGameManager>();
+        if (netManager != null)
+        {
+            // El RPC_SyncReady del NetworkGameManager ya se encarga de usar RpcTarget.All,
+            // por lo que actualizará el gameManager local y el remoto al mismo tiempo.
+            netManager.SendReady();
+        }
+
         SetStatus("Listo. Esperando oponente...");
     }
 

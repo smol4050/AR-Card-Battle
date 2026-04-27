@@ -2841,7 +2841,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 404.10895, y: 251.5}
+  m_AnchoredPosition: {x: 404.10895, y: 298.7}
   m_SizeDelta: {x: 160, y: 30}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1173158609
@@ -3029,6 +3029,7 @@ GameObject:
   - component: {fileID: 1303697024}
   - component: {fileID: 1303697026}
   - component: {fileID: 1303697027}
+  - component: {fileID: 1303697028}
   m_Layer: 0
   m_Name: XR Origin
   m_TagString: Untagged
@@ -3099,7 +3100,27 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d39395a3867a32e4589bbb39423928a7, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ARCardScanner1
-  battlefieldNetworkPrefab: {fileID: 2913178400771908669, guid: 8e82efb63525dc84a8e05cb300651fee, type: 3}
+  battlefieldPrefab: {fileID: 2913178400771908669, guid: 8e82efb63525dc84a8e05cb300651fee, type: 3}
+--- !u!114 &1303697028
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1303697023}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: be0a592e73374a04b8b888052228d5ce, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ARCardPreview
+  cardPreviews: []
+  offsetY: 0.02
+  previewScale: 0.06
+  rotationOffsetY: 0
+  popDuration: 0.25
+  fadeDuration: 0.2
+  autoRotate: 1
+  autoRotateSpeed: 45
 --- !u!1 &1495491094
 GameObject:
   m_ObjectHideFlags: 0
@@ -4856,7 +4877,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 404.10895, y: 251.5}
+  m_AnchoredPosition: {x: 404.10895, y: 297.1}
   m_SizeDelta: {x: 160, y: 30}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!1 &1980831905
